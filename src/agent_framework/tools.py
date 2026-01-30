@@ -7,7 +7,7 @@ execute to perform specific actions.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type
 
 
 class Tool(ABC):
@@ -191,3 +191,60 @@ class ToolRegistry:
         """Return a human-readable string representation."""
         tool_list = ", ".join(self.list_tools()) if self._tools else "none"
         return f"ToolRegistry with {len(self._tools)} tool(s): {tool_list}"
+
+
+def tool(
+    registry: ToolRegistry,
+    name: str,
+    description: str,
+    parameters_schema: Optional[Dict[str, Any]] = None
+) -> Callable[[Type[Tool]], Type[Tool]]:
+    """
+    Decorator for automatic tool registration.
+
+    This decorator simplifies tool creation by automatically registering
+    a tool instance to a registry when the class is defined. The decorated
+    class can still be instantiated manually if needed.
+
+    Args:
+        registry: The ToolRegistry to register the tool with.
+        name: A unique identifier for the tool.
+        description: A human-readable description of the tool's purpose.
+        parameters_schema: Optional JSON schema defining expected parameters.
+
+    Returns:
+        A decorator function that registers the tool and returns the class.
+
+    Example:
+        >>> registry = ToolRegistry()
+        >>> @tool(registry=registry, name="my_tool", description="Does something")
+        ... class MyTool(Tool):
+        ...     def execute(self, **kwargs):
+        ...         return "result"
+        >>> registry.has_tool("my_tool")
+        True
+    """
+    def decorator(tool_class: Type[Tool]) -> Type[Tool]:
+        """
+        Inner decorator that wraps the tool class.
+
+        Args:
+            tool_class: The Tool class to register.
+
+        Returns:
+            The original tool class, unmodified.
+        """
+        # Create an instance of the tool with the provided metadata
+        tool_instance = tool_class(
+            name=name,
+            description=description,
+            parameters_schema=parameters_schema
+        )
+
+        # Register the instance with the registry
+        registry.register(tool_instance)
+
+        # Return the original class so it can still be used
+        return tool_class
+
+    return decorator

@@ -348,3 +348,36 @@ class TestToolExecution:
         result = registry.execute_tool("test", x=1, y=2)
         assert result["executed"] is True
         assert result["params"] == {"x": 1, "y": 2}
+
+
+class TestToolDecorator:
+    """Test suite for the @tool decorator functionality."""
+
+    def test_tool_decorator(self):
+        """Test that @tool decorator automatically registers tools."""
+        from agent_framework.tools import tool
+
+        # Create a fresh registry for this test
+        test_registry = ToolRegistry()
+
+        # Use decorator with custom registry
+        @tool(registry=test_registry, name="decorated_tool", description="A decorated tool")
+        class DecoratedTool(Tool):
+            def execute(self, **kwargs) -> Any:
+                return {"decorated": True, "params": kwargs}
+
+        # Verify tool is registered
+        assert test_registry.has_tool("decorated_tool")
+        assert len(test_registry) == 1
+
+        # Verify we can retrieve and execute the tool
+        result = test_registry.execute_tool("decorated_tool", test_param="value")
+        assert result["decorated"] is True
+        assert result["params"]["test_param"] == "value"
+
+        # Verify the class itself is still usable
+        manual_instance = DecoratedTool(
+            name="manual",
+            description="Manual instance"
+        )
+        assert manual_instance.execute(x=1)["decorated"] is True
