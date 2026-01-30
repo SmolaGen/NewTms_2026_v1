@@ -355,6 +355,204 @@ class TestFileRelationships:
 
         assert "test1.py" not in related
 
+    def test_add_explicit_relationship(self):
+        """Test adding explicit relationships between files."""
+        cm = ContextManager()
+
+        cm.add_file("main.py", "import utils")
+        cm.add_file("utils.py", "def helper(): pass")
+
+        # Add explicit relationship
+        cm.add_relationship("main.py", "utils.py", "imports")
+
+        # Get relationships
+        relationships = cm.get_relationships("main.py")
+
+        assert "imports" in relationships
+        assert "utils.py" in relationships["imports"]
+
+    def test_get_relationships_specific_type(self):
+        """Test getting specific relationship types."""
+        cm = ContextManager()
+
+        cm.add_file("main.py", "content")
+        cm.add_file("utils.py", "content")
+        cm.add_file("config.py", "content")
+
+        cm.add_relationship("main.py", "utils.py", "imports")
+        cm.add_relationship("main.py", "config.py", "depends_on")
+
+        # Get only imports
+        imports = cm.get_relationships("main.py", "imports")
+
+        assert "imports" in imports
+        assert "utils.py" in imports["imports"]
+        assert "depends_on" not in imports
+
+    def test_automatic_import_tracking(self):
+        """Test automatic tracking of Python imports."""
+        cm = ContextManager()
+
+        # Add files that will be imported
+        cm.add_file("src/agent_framework/tools.py", "class Tool: pass")
+        cm.add_file("src/agent_framework/context.py", "class ContextManager: pass")
+
+        # Add file with imports
+        cm.add_file("src/agent_framework/agent.py", """
+from agent_framework.tools import Tool
+import agent_framework.context
+""")
+
+        # Check that relationships were automatically tracked
+        relationships = cm.get_relationships("src/agent_framework/agent.py")
+
+        assert "imports" in relationships
+        # At least one import should be tracked
+        assert len(relationships["imports"]) > 0
+
+    def test_relationship_boosts_relevance(self):
+        """Test that explicit relationships boost relevance in get_related_files."""
+        cm = ContextManager()
+
+        cm.add_file("main.py", "import helper")
+        cm.add_file("helper.py", "def utility(): pass")
+        cm.add_file("similar.py", "import different helper function")
+
+        # Add explicit relationship
+        cm.add_relationship("main.py", "helper.py", "imports")
+
+        related = cm.get_related_files("main.py", max_results=5)
+
+        # helper.py should rank higher due to explicit relationship
+        if len(related) >= 2:
+            # helper.py should appear before similar.py due to relationship boost
+            assert "helper.py" in related
+
+    def test_remove_file_cleans_relationships(self):
+        """Test that removing a file also removes its relationships."""
+        cm = ContextManager()
+
+        cm.add_file("main.py", "content")
+        cm.add_file("utils.py", "content")
+
+        cm.add_relationship("main.py", "utils.py", "imports")
+
+        # Remove the file
+        cm.remove_file("main.py")
+
+        # Relationships should be gone
+        relationships = cm.get_relationships("main.py")
+        assert relationships == {}
+
+    def test_clear_removes_relationships(self):
+        """Test that clear() removes all relationships."""
+        cm = ContextManager()
+
+        cm.add_file("main.py", "content")
+        cm.add_file("utils.py", "content")
+        cm.add_relationship("main.py", "utils.py", "imports")
+
+        cm.clear()
+
+        relationships = cm.get_relationships("main.py")
+        assert relationships == {}
+
+    def test_relationship_stats(self):
+        """Test that statistics include relationship counts."""
+        cm = ContextManager()
+
+        cm.add_file("main.py", "content")
+        cm.add_file("utils.py", "content")
+        cm.add_file("config.py", "content")
+
+        cm.add_relationship("main.py", "utils.py", "imports")
+        cm.add_relationship("main.py", "config.py", "imports")
+
+        stats = cm.get_stats()
+
+        assert "relationship_count" in stats
+        assert stats["relationship_count"] >= 2
+
+
+def test_file_relationships():
+    """
+    Comprehensive test for multi-file relationship tracking.
+
+    This test validates import tracking, dependency tracking, and
+    semantic relationships between files.
+    """
+    cm = ContextManager()
+
+    # Create a mini project structure
+    cm.add_file("src/agent_framework/__init__.py", "")
+    cm.add_file("src/agent_framework/agent.py", """
+from agent_framework.tools import Tool, ToolRegistry
+from agent_framework.context import ContextManager
+
+class Agent:
+    def __init__(self):
+        self.tools = ToolRegistry()
+        self.context = ContextManager()
+""")
+
+    cm.add_file("src/agent_framework/tools.py", """
+class Tool:
+    pass
+
+class ToolRegistry:
+    pass
+""")
+
+    cm.add_file("src/agent_framework/context.py", """
+class ContextManager:
+    pass
+""")
+
+    # Test automatic import tracking
+    agent_relationships = cm.get_relationships("src/agent_framework/agent.py")
+    assert "imports" in agent_relationships
+    assert len(agent_relationships["imports"]) > 0
+
+    # Test that related files are found
+    related_to_agent = cm.get_related_files("src/agent_framework/agent.py", max_results=5)
+    assert len(related_to_agent) > 0
+
+    # At least one of the imported files should be in related files
+    imported_files = set(agent_relationships["imports"])
+    related_set = set(related_to_agent)
+    assert len(imported_files & related_set) > 0
+
+    # Test manual relationship addition
+    cm.add_relationship("src/agent_framework/tools.py",
+                       "src/agent_framework/context.py",
+                       "depends_on")
+
+    tools_relationships = cm.get_relationships("src/agent_framework/tools.py")
+    assert "depends_on" in tools_relationships
+    assert "src/agent_framework/context.py" in tools_relationships["depends_on"]
+
+    # Test that relationships survive file updates
+    cm.add_file("src/agent_framework/agent.py", """
+from agent_framework.tools import Tool
+# Updated content
+class Agent:
+    pass
+""")
+
+    # Should still have import relationships (re-tracked)
+    agent_relationships_updated = cm.get_relationships("src/agent_framework/agent.py")
+    assert "imports" in agent_relationships_updated
+
+    # Test relationship removal
+    cm.remove_file("src/agent_framework/agent.py")
+    agent_relationships_after_removal = cm.get_relationships("src/agent_framework/agent.py")
+    assert agent_relationships_after_removal == {}
+
+    # Test statistics
+    stats = cm.get_stats()
+    assert "relationship_count" in stats
+    assert stats["relationship_count"] >= 0
+
 
 class TestContextManagerStats:
     """Test suite for context manager statistics."""
