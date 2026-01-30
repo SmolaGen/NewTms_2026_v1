@@ -48,6 +48,48 @@ class TestContextManagerInitialization:
 class TestFileManagement:
     """Test suite for file addition, retrieval, and removal."""
 
+    def test_file_storage(self):
+        """Test efficient file content storage and retrieval."""
+        cm = ContextManager()
+
+        # Test basic storage
+        cm.add_file("file1.py", "content1")
+        assert cm.has_file("file1.py")
+        assert cm.get_file("file1.py")["content"] == "content1"
+
+        # Test storage with metadata
+        metadata = {"language": "python", "size": 100}
+        cm.add_file("file2.py", "content2", metadata=metadata)
+        file2_data = cm.get_file("file2.py")
+        assert file2_data["content"] == "content2"
+        assert file2_data["metadata"] == metadata
+
+        # Test updating existing file
+        cm.add_file("file1.py", "updated_content1")
+        assert cm.get_file("file1.py")["content"] == "updated_content1"
+        assert len(cm) == 2  # Should still have 2 files, not 3
+
+        # Test retrieval returns copy (data isolation)
+        data1 = cm.get_file("file1.py")
+        data1["content"] = "modified"
+        data2 = cm.get_file("file1.py")
+        assert data2["content"] == "updated_content1"  # Original unchanged
+
+        # Test efficient storage of multiple files
+        for i in range(10):
+            cm.add_file(f"bulk_{i}.py", f"content_{i}")
+        assert len(cm) == 12  # 2 original + 10 new
+
+        # Verify all files are retrievable
+        for i in range(10):
+            assert cm.has_file(f"bulk_{i}.py")
+            assert cm.get_file(f"bulk_{i}.py")["content"] == f"content_{i}"
+
+        # Test storage statistics
+        stats = cm.get_stats()
+        assert stats["file_count"] == 12
+        assert stats["total_size"] > 0
+
     def test_add_file(self):
         """Test adding a file to the context manager."""
         cm = ContextManager()
