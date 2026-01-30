@@ -22,7 +22,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-dependencies = []
+dependencies = [
+    "jsonschema>=4.0.0",
+]
 
 [project.optional-dependencies]
 dev = [

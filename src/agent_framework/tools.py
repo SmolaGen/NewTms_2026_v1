@@ -9,6 +9,19 @@ execute to perform specific actions.
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Type
 
+try:
+    import jsonschema
+    from jsonschema import ValidationError as JsonSchemaValidationError
+    JSONSCHEMA_AVAILABLE = True
+except ImportError:
+    JSONSCHEMA_AVAILABLE = False
+    JsonSchemaValidationError = Exception
+
+
+class ValidationError(Exception):
+    """Raised when tool parameter validation fails."""
+    pass
+
 
 class Tool(ABC):
     """
@@ -40,6 +53,34 @@ class Tool(ABC):
         self.name = name
         self.description = description
         self.parameters_schema = parameters_schema or {}
+
+    def validate_parameters(self, **kwargs) -> None:
+        """
+        Validate parameters against the tool's parameter schema.
+
+        Args:
+            **kwargs: Keyword arguments to validate.
+
+        Raises:
+            ValueError: If jsonschema is not available and schema is defined.
+            ValidationError: If parameters don't match the schema.
+        """
+        if not self.parameters_schema:
+            # No schema defined, skip validation
+            return
+
+        if not JSONSCHEMA_AVAILABLE:
+            raise ValueError(
+                "jsonschema library is required for parameter validation but not installed"
+            )
+
+        try:
+            jsonschema.validate(instance=kwargs, schema=self.parameters_schema)
+        except JsonSchemaValidationError as e:
+            # Re-raise with a more descriptive message
+            raise ValidationError(
+                f"Parameter validation failed for tool '{self.name}': {e.message}"
+            ) from e
 
     @abstractmethod
     def execute(self, **kwargs) -> Any:
@@ -157,10 +198,10 @@ class ToolRegistry:
 
     def execute_tool(self, tool_name: str, **kwargs) -> Any:
         """
-        Execute a tool by name.
+        Execute a tool by name with parameter validation.
 
-        This is a convenience method that retrieves and executes a tool
-        in a single call.
+        This is a convenience method that retrieves a tool, validates
+        its parameters, and executes it in a single call.
 
         Args:
             tool_name: The name of the tool to execute.
@@ -171,8 +212,10 @@ class ToolRegistry:
 
         Raises:
             KeyError: If the tool is not found in the registry.
+            ValidationError: If parameters don't match the tool's schema.
         """
         tool = self.get_tool(tool_name)
+        tool.validate_parameters(**kwargs)
         return tool.execute(**kwargs)
 
     def clear(self) -> None:
