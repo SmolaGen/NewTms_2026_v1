@@ -648,3 +648,111 @@ class TestPathNormalization:
         assert len(cm) == 1
         file_data = cm.get_file("dir/file.py")
         assert file_data["content"] == "updated"
+
+
+def test_context_window():
+    """
+    Test context window management for large codebases.
+
+    This test validates token-based context management, prioritization,
+    and pruning when contexts exceed token limits.
+    """
+    cm = ContextManager()
+
+    # Add files with varying sizes and importance
+    # High priority: recently accessed, has relationships
+    cm.add_file("main.py", "import utils\nimport config\n" + "x = 1\n" * 50)
+    cm.add_file("utils.py", "def helper():\n    pass\n" + "# comment\n" * 30)
+    cm.add_file("config.py", "CONFIG = {}\n" + "# settings\n" * 20)
+
+    # Medium priority: related but not accessed
+    cm.add_file("models.py", "class Model:\n    pass\n" + "# data model\n" * 40)
+
+    # Low priority: unrelated
+    cm.add_file("unrelated.py", "def unrelated():\n    pass\n" + "# unrelated\n" * 100)
+
+    # Add explicit relationships to boost priority
+    cm.add_relationship("main.py", "utils.py", "imports")
+    cm.add_relationship("main.py", "config.py", "imports")
+
+    # Test 1: Get context window with generous token limit (should include all)
+    context_large = cm.get_context_window(token_limit=10000)
+    assert len(context_large) > 0
+    assert all(isinstance(item, dict) for item in context_large)
+    assert all("file_path" in item and "content" in item for item in context_large)
+
+    # Test 2: Get context window with strict token limit
+    # Should prioritize based on relationships and relevance
+    context_small = cm.get_context_window(token_limit=500, anchor_file="main.py")
+    assert len(context_small) > 0
+    assert len(context_small) <= len(context_large)
+
+    # Verify total tokens don't exceed limit
+    total_tokens = sum(cm.estimate_tokens(item["content"]) for item in context_small)
+    assert total_tokens <= 500
+
+    # Test 3: Anchor file should be included if specified
+    file_paths = [item["file_path"] for item in context_small]
+    assert "main.py" in file_paths
+
+    # Test 4: Related files should be prioritized over unrelated
+    # utils.py and config.py should be preferred over unrelated.py
+    if len(context_small) >= 2:
+        # At least some related files should be included
+        has_related = "utils.py" in file_paths or "config.py" in file_paths
+        assert has_related
+
+    # Test 5: Test with very small token limit
+    context_tiny = cm.get_context_window(token_limit=100, anchor_file="main.py")
+    assert len(context_tiny) >= 1  # Should at least include anchor file
+    total_tokens_tiny = sum(cm.estimate_tokens(item["content"]) for item in context_tiny)
+    # May slightly exceed if anchor file alone is larger, but should be close
+    assert total_tokens_tiny <= 150  # Allow some tolerance
+
+    # Test 6: Test without anchor file (should use LRU/relevance)
+    context_no_anchor = cm.get_context_window(token_limit=500)
+    assert len(context_no_anchor) > 0
+
+    # Test 7: Test token estimation
+    test_content = "This is a test string with multiple words."
+    tokens = cm.estimate_tokens(test_content)
+    assert tokens > 0
+    assert isinstance(tokens, int)
+
+    # Simple validation: token count should be roughly proportional to content length
+    short_content = "short"
+    long_content = "word " * 100
+    assert cm.estimate_tokens(short_content) < cm.estimate_tokens(long_content)
+
+    # Test 8: Test with max_tokens parameter (alternative name for token_limit)
+    context_max_tokens = cm.get_context_window(max_tokens=500)
+    assert len(context_max_tokens) > 0
+
+    # Test 9: Test prioritization order
+    # Access a specific file to boost its priority
+    cm.get_file("models.py")
+    context_after_access = cm.get_context_window(token_limit=500)
+    # models.py should be more likely to be included now
+    # (This is a soft assertion based on LRU)
+
+    # Test 10: Test error handling for invalid parameters
+    with pytest.raises(ValueError):
+        cm.get_context_window(token_limit=-100)
+
+    with pytest.raises(ValueError):
+        cm.get_context_window(token_limit=0)
+
+    # Test 11: Empty context manager should return empty list
+    cm_empty = ContextManager()
+    context_empty = cm_empty.get_context_window(token_limit=1000)
+    assert context_empty == []
+
+    # Test 12: Single file within limit
+    cm_single = ContextManager()
+    cm_single.add_file("single.py", "content")
+    context_single = cm_single.get_context_window(token_limit=1000)
+    assert len(context_single) == 1
+    assert context_single[0]["file_path"] == "single.py"
+
+    # Test 13: Verify metadata is included in context window results
+    assert all("metadata" in item for item in context_large)

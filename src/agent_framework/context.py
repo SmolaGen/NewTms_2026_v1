@@ -304,6 +304,188 @@ class ContextManager:
             "relationship_count": relationship_count,
         }
 
+    def estimate_tokens(self, content: str) -> int:
+        """
+        Estimate the number of tokens in content.
+
+        This uses a simple approximation: tokens ≈ words + punctuation / 2.
+        For more accurate token counting, integrate with a proper tokenizer
+        (e.g., tiktoken for OpenAI models).
+
+        Args:
+            content: The text content to estimate tokens for.
+
+        Returns:
+            Estimated number of tokens as an integer.
+        """
+        if not content:
+            return 0
+
+        # Simple heuristic: split on whitespace and count words
+        # Most LLMs have roughly 1.3-1.5 tokens per word on average
+        # We'll use a simple word count as a conservative estimate
+        words = content.split()
+        word_count = len(words)
+
+        # Add estimate for punctuation and special characters
+        # Rough estimate: count special chars and divide by 2
+        special_chars = sum(1 for c in content if c in ".,;:!?()[]{}\"'`-_=+*/\\|<>@#$%^&")
+        punctuation_tokens = special_chars // 2
+
+        # Total estimated tokens
+        estimated_tokens = word_count + punctuation_tokens
+
+        return max(1, estimated_tokens)  # At minimum, 1 token
+
+    def get_context_window(
+        self,
+        token_limit: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        anchor_file: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get a subset of files that fit within a token budget.
+
+        This method implements intelligent context window management for large
+        codebases. It prioritizes files based on relationships, recency, and
+        relevance to ensure the most important context fits within token limits.
+
+        Prioritization order:
+        1. Anchor file (if specified) - always included
+        2. Files with explicit relationships to anchor file
+        3. Recently accessed files (LRU order)
+        4. Remaining files by relevance
+
+        Args:
+            token_limit: Maximum number of tokens to include. If None, includes all files.
+            max_tokens: Alternative parameter name for token_limit. token_limit takes precedence.
+            anchor_file: Optional file path to use as anchor. This file and its
+                related files will be prioritized.
+
+        Returns:
+            List of dictionaries, each containing 'file_path', 'content', and 'metadata'
+            for files that fit within the token budget. Ordered by priority (highest first).
+
+        Raises:
+            ValueError: If token_limit is less than or equal to 0.
+        """
+        # Determine effective token limit
+        effective_limit = token_limit if token_limit is not None else max_tokens
+
+        if effective_limit is not None and effective_limit <= 0:
+            raise ValueError("token_limit must be greater than 0")
+
+        # If no files, return empty list
+        if not self._files:
+            return []
+
+        # Normalize anchor file path if provided
+        normalized_anchor = None
+        if anchor_file:
+            normalized_anchor = str(Path(anchor_file).as_posix())
+            # Validate anchor file exists
+            if normalized_anchor not in self._files:
+                normalized_anchor = None
+
+        # If no token limit, return all files (prioritized)
+        if effective_limit is None:
+            result = []
+            for file_path in self._get_prioritized_files(normalized_anchor):
+                file_data = self._files[file_path]
+                result.append({
+                    "file_path": file_path,
+                    "content": file_data["content"],
+                    "metadata": file_data["metadata"],
+                })
+            return result
+
+        # Build prioritized file list with token counts
+        file_priorities: List[Tuple[str, int, int]] = []  # (file_path, priority, tokens)
+
+        for priority, file_path in enumerate(self._get_prioritized_files(normalized_anchor)):
+            file_data = self._files[file_path]
+            tokens = self.estimate_tokens(file_data["content"])
+            file_priorities.append((file_path, priority, tokens))
+
+        # Select files that fit within token budget
+        selected_files: List[str] = []
+        total_tokens = 0
+
+        for file_path, priority, tokens in file_priorities:
+            # Always include anchor file, even if it exceeds limit slightly
+            if file_path == normalized_anchor:
+                selected_files.append(file_path)
+                total_tokens += tokens
+                continue
+
+            # Check if adding this file would exceed limit
+            if total_tokens + tokens <= effective_limit:
+                selected_files.append(file_path)
+                total_tokens += tokens
+            elif not selected_files:
+                # If no files selected yet and this is the first file,
+                # include it even if it exceeds limit (to avoid empty result)
+                selected_files.append(file_path)
+                total_tokens += tokens
+                break
+
+        # Build result list maintaining priority order
+        result = []
+        for file_path in selected_files:
+            file_data = self._files[file_path]
+            result.append({
+                "file_path": file_path,
+                "content": file_data["content"],
+                "metadata": file_data["metadata"],
+            })
+
+        return result
+
+    def _get_prioritized_files(self, anchor_file: Optional[str] = None) -> List[str]:
+        """
+        Get list of all files in priority order.
+
+        Priority order:
+        1. Anchor file (if specified)
+        2. Files explicitly related to anchor file
+        3. Files in LRU order (most recently accessed first)
+
+        Args:
+            anchor_file: Optional anchor file path (already normalized).
+
+        Returns:
+            List of file paths in priority order.
+        """
+        prioritized = []
+        seen = set()
+
+        # 1. Add anchor file first
+        if anchor_file and anchor_file in self._files:
+            prioritized.append(anchor_file)
+            seen.add(anchor_file)
+
+        # 2. Add explicitly related files to anchor
+        if anchor_file and anchor_file in self._relationships:
+            for relationship_type, related_files in self._relationships[anchor_file].items():
+                for related_file in related_files:
+                    if related_file in self._files and related_file not in seen:
+                        prioritized.append(related_file)
+                        seen.add(related_file)
+
+        # 3. Add remaining files in LRU order (most recent first)
+        for file_path in reversed(self._access_order):
+            if file_path not in seen:
+                prioritized.append(file_path)
+                seen.add(file_path)
+
+        # 4. Add any files not in access order (shouldn't happen, but be safe)
+        for file_path in self._files.keys():
+            if file_path not in seen:
+                prioritized.append(file_path)
+                seen.add(file_path)
+
+        return prioritized
+
     def add_relationship(
         self,
         file_path: str,
