@@ -244,3 +244,102 @@ class TestAgentWithTools:
             agent.register_tool(tool)
 
         assert "No tool registry" in str(exc_info.value)
+
+
+class TestAgentWithContext:
+    """Test suite for Agent integration with context management system."""
+
+    def test_agent_with_context(self):
+        """Test that agents can be initialized with a context manager."""
+        from agent_framework.context import ContextManager
+
+        # Create a context manager and add some files
+        context_mgr = ContextManager()
+        context_mgr.add_file("test.py", "def hello(): pass", {"language": "python"})
+        context_mgr.add_file("utils.py", "def helper(): pass", {"language": "python"})
+
+        # Create an agent with the context manager
+        agent = ConcreteAgent(name="context_agent", context_manager=context_mgr)
+
+        # Verify the agent has the context manager
+        assert agent.context_manager is context_mgr
+        assert agent.has_context_file("test.py")
+        assert agent.has_context_file("utils.py")
+        assert set(agent.list_context_files()) == {"test.py", "utils.py"}
+
+        # Verify the agent can retrieve files
+        file_data = agent.get_context_file("test.py")
+        assert file_data is not None
+        assert file_data["content"] == "def hello(): pass"
+        assert file_data["metadata"]["language"] == "python"
+
+        # Verify the agent can search context
+        results = agent.search_context("hello")
+        assert "test.py" in results
+
+    def test_agent_without_context(self):
+        """Test that agents work without a context manager."""
+        agent = ConcreteAgent(name="simple_agent")
+
+        # Verify the agent has no context manager
+        assert agent.context_manager is None
+        assert agent.list_context_files() == []
+        assert not agent.has_context_file("anything.py")
+        assert agent.get_context_file("anything.py") is None
+
+    def test_agent_add_context_file(self):
+        """Test that agents can add files to their context manager."""
+        from agent_framework.context import ContextManager
+
+        context_mgr = ContextManager()
+        agent = ConcreteAgent(name="agent", context_manager=context_mgr)
+
+        # Add a file through the agent
+        agent.add_context_file("new.py", "print('hello')", {"type": "script"})
+
+        # Verify the file is added
+        assert agent.has_context_file("new.py")
+        file_data = agent.get_context_file("new.py")
+        assert file_data["content"] == "print('hello')"
+        assert file_data["metadata"]["type"] == "script"
+
+    def test_agent_context_window(self):
+        """Test that agents can retrieve context windows."""
+        from agent_framework.context import ContextManager
+
+        context_mgr = ContextManager()
+        context_mgr.add_file("file1.py", "x = 1" * 100)
+        context_mgr.add_file("file2.py", "y = 2" * 50)
+        context_mgr.add_file("file3.py", "z = 3" * 25)
+
+        agent = ConcreteAgent(name="agent", context_manager=context_mgr)
+
+        # Get context window with token limit
+        window = agent.get_context_window(token_limit=200)
+        assert len(window) > 0
+        assert all("file_path" in item for item in window)
+        assert all("content" in item for item in window)
+        assert all("metadata" in item for item in window)
+
+    def test_agent_add_context_without_manager_raises_error(self):
+        """Test that adding context without a manager raises an error."""
+        agent = ConcreteAgent(name="no_context")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            agent.add_context_file("test.py", "content")
+
+        assert "no context manager" in str(exc_info.value).lower()
+
+    def test_agent_search_context_without_manager_returns_empty(self):
+        """Test that searching context without a manager returns empty list."""
+        agent = ConcreteAgent(name="no_context")
+
+        results = agent.search_context("query")
+        assert results == []
+
+    def test_agent_get_context_window_without_manager_returns_empty(self):
+        """Test that getting context window without a manager returns empty list."""
+        agent = ConcreteAgent(name="no_context")
+
+        window = agent.get_context_window(token_limit=100)
+        assert window == []

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent_framework.tools import Tool, ToolRegistry
+    from agent_framework.context import ContextManager
 
 
 class Agent(ABC):
@@ -25,13 +26,15 @@ class Agent(ABC):
         name: A human-readable name for the agent instance.
         config: Optional configuration dictionary for agent-specific settings.
         tool_registry: Optional tool registry for managing agent capabilities.
+        context_manager: Optional context manager for multi-file context handling.
     """
 
     def __init__(
         self,
         name: str,
         config: Optional[Dict[str, Any]] = None,
-        tool_registry: Optional["ToolRegistry"] = None
+        tool_registry: Optional["ToolRegistry"] = None,
+        context_manager: Optional["ContextManager"] = None
     ):
         """
         Initialize the agent with a name and optional configuration.
@@ -40,10 +43,12 @@ class Agent(ABC):
             name: A human-readable name for this agent instance.
             config: Optional dictionary of configuration parameters.
             tool_registry: Optional tool registry for managing agent tools.
+            context_manager: Optional context manager for multi-file context handling.
         """
         self.name = name
         self.config = config or {}
         self.tool_registry = tool_registry
+        self.context_manager = context_manager
         self._initialized = False
 
     @abstractmethod
@@ -217,3 +222,124 @@ class Agent(ABC):
                 "Initialize with a ToolRegistry to use tools."
             )
         return self.tool_registry.execute_tool(tool_name, **kwargs)
+
+    def add_context_file(
+        self,
+        file_path: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Add a file to the agent's context manager.
+
+        This is a convenience method that delegates to the context manager's
+        add_file method.
+
+        Args:
+            file_path: Path to the file (used as unique identifier).
+            content: The file's content as a string.
+            metadata: Optional dictionary of additional metadata.
+
+        Raises:
+            RuntimeError: If the agent doesn't have a context manager.
+            ValueError: If file_path is empty or content is None.
+        """
+        if self.context_manager is None:
+            raise RuntimeError(
+                f"Agent '{self.name}' has no context manager. "
+                "Initialize with a ContextManager to use context management."
+            )
+        self.context_manager.add_file(file_path, content, metadata)
+
+    def get_context_file(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a file from the agent's context manager.
+
+        This is a convenience method that delegates to the context manager's
+        get_file method.
+
+        Args:
+            file_path: Path to the file to retrieve.
+
+        Returns:
+            Dictionary containing 'content', 'metadata', and 'size' keys,
+            or None if the file is not found or agent has no context manager.
+        """
+        if self.context_manager is None:
+            return None
+        return self.context_manager.get_file(file_path)
+
+    def has_context_file(self, file_path: str) -> bool:
+        """
+        Check if a file is in the agent's context manager.
+
+        Args:
+            file_path: Path to the file to check.
+
+        Returns:
+            True if the file exists, False otherwise.
+            Returns False if the agent doesn't have a context manager.
+        """
+        if self.context_manager is None:
+            return False
+        return self.context_manager.has_file(file_path)
+
+    def list_context_files(self) -> List[str]:
+        """
+        Get a list of all files in the agent's context.
+
+        Returns:
+            List of file paths in alphabetical order.
+            Returns an empty list if the agent doesn't have a context manager.
+        """
+        if self.context_manager is None:
+            return []
+        return self.context_manager.list_files()
+
+    def search_context(self, query: str, max_results: int = 10) -> List[str]:
+        """
+        Search for files in the agent's context.
+
+        This is a convenience method that delegates to the context manager's
+        search method.
+
+        Args:
+            query: The search string to look for.
+            max_results: Maximum number of results to return.
+
+        Returns:
+            List of file paths that match the query.
+            Returns empty list if the agent doesn't have a context manager.
+
+        Raises:
+            ValueError: If query is empty (when context manager exists).
+        """
+        if self.context_manager is None:
+            return []
+        return self.context_manager.search(query, max_results)
+
+    def get_context_window(
+        self,
+        token_limit: Optional[int] = None,
+        anchor_file: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get a subset of context files that fit within a token budget.
+
+        This is a convenience method that delegates to the context manager's
+        get_context_window method.
+
+        Args:
+            token_limit: Maximum number of tokens to include.
+            anchor_file: Optional file path to use as anchor for prioritization.
+
+        Returns:
+            List of dictionaries with 'file_path', 'content', and 'metadata'.
+            Returns empty list if the agent doesn't have a context manager.
+
+        Raises:
+            ValueError: If token_limit is less than or equal to 0 (when context manager exists).
+        """
+        if self.context_manager is None:
+            return []
+        return self.context_manager.get_context_window(token_limit=token_limit, anchor_file=anchor_file)
