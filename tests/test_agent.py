@@ -133,3 +133,30 @@ class TestAgentAbstraction:
 
         with pytest.raises(TypeError):
             IncompleteAgent3(name="incomplete")
+
+    def test_agent_lifecycle(self):
+        """Test agent lifecycle methods (initialize, cleanup)."""
+        agent = ConcreteAgent(name="lifecycle_agent")
+
+        # Initially not initialized
+        assert agent._initialized is False
+
+        # Initialize the agent
+        agent.initialize()
+        assert agent._initialized is True
+
+        # Initialize is idempotent
+        agent.initialize()
+        assert agent._initialized is True
+
+        # Cleanup the agent
+        agent.cleanup()
+        assert agent._initialized is False
+
+        # Cleanup is idempotent
+        agent.cleanup()
+        assert agent._initialized is False
+
+        # Can re-initialize after cleanup
+        agent.initialize()
+        assert agent._initialized is True

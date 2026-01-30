@@ -101,3 +101,33 @@ class Agent(ABC):
     def __str__(self) -> str:
         """Return a human-readable string representation."""
         return f"Agent: {self.name}"
+
+    def initialize(self) -> None:
+        """
+        Initialize the agent and prepare it for execution.
+
+        This method sets up the agent's state and resources. It should be called
+        before the agent starts executing tasks. The method is idempotent - calling
+        it multiple times has no additional effect after the first call.
+
+        Subclasses can override this method to add custom initialization logic,
+        but should call super().initialize() to ensure proper base initialization.
+
+        Raises:
+            RuntimeError: If initialization fails.
+        """
+        if not self._initialized:
+            self._initialized = True
+
+    def cleanup(self) -> None:
+        """
+        Clean up the agent's resources and reset its state.
+
+        This method should be called when the agent is no longer needed to ensure
+        proper resource cleanup. It is idempotent - calling it multiple times is safe.
+
+        Subclasses can override this method to add custom cleanup logic,
+        but should call super().cleanup() to ensure proper base cleanup.
+        """
+        if self._initialized:
+            self._initialized = False
