@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from agent_framework.tools import Tool, ToolRegistry
     from agent_framework.context import ContextManager
+    from agent_framework.logging import AgentLogger
 
 
 class Agent(ABC):
@@ -27,6 +28,7 @@ class Agent(ABC):
         config: Optional configuration dictionary for agent-specific settings.
         tool_registry: Optional tool registry for managing agent capabilities.
         context_manager: Optional context manager for multi-file context handling.
+        logger: Optional logger for introspection and debugging.
     """
 
     def __init__(
@@ -34,7 +36,8 @@ class Agent(ABC):
         name: str,
         config: Optional[Dict[str, Any]] = None,
         tool_registry: Optional["ToolRegistry"] = None,
-        context_manager: Optional["ContextManager"] = None
+        context_manager: Optional["ContextManager"] = None,
+        logger: Optional["AgentLogger"] = None
     ):
         """
         Initialize the agent with a name and optional configuration.
@@ -44,11 +47,13 @@ class Agent(ABC):
             config: Optional dictionary of configuration parameters.
             tool_registry: Optional tool registry for managing agent tools.
             context_manager: Optional context manager for multi-file context handling.
+            logger: Optional logger for introspection and debugging.
         """
         self.name = name
         self.config = config or {}
         self.tool_registry = tool_registry
         self.context_manager = context_manager
+        self.logger = logger
         self._initialized = False
 
     @abstractmethod
@@ -118,6 +123,20 @@ class Agent(ABC):
         """Return a human-readable string representation."""
         return f"Agent: {self.name}"
 
+    def _log(self, level: str, message: str, **extra) -> None:
+        """
+        Internal helper to safely log messages if logger is available.
+
+        Args:
+            level: Log level (debug, info, warning, error, critical).
+            message: The message to log.
+            **extra: Additional context to include in the log.
+        """
+        if self.logger is not None:
+            log_method = getattr(self.logger, level.lower(), None)
+            if log_method is not None:
+                log_method(message, agent=self.name, **extra)
+
     def initialize(self) -> None:
         """
         Initialize the agent and prepare it for execution.
@@ -133,6 +152,7 @@ class Agent(ABC):
             RuntimeError: If initialization fails.
         """
         if not self._initialized:
+            self._log("info", "Agent initialized", action="initialize")
             self._initialized = True
 
     def cleanup(self) -> None:
@@ -146,6 +166,7 @@ class Agent(ABC):
         but should call super().cleanup() to ensure proper base cleanup.
         """
         if self._initialized:
+            self._log("info", "Agent cleanup", action="cleanup")
             self._initialized = False
 
     def register_tool(self, tool: "Tool") -> None:
@@ -169,6 +190,7 @@ class Agent(ABC):
                 "Initialize with a ToolRegistry to use tools."
             )
         self.tool_registry.register(tool)
+        self._log("info", f"Registered tool: {tool.name}", action="register_tool", tool_name=tool.name)
 
     def has_tool(self, tool_name: str) -> bool:
         """
@@ -221,7 +243,10 @@ class Agent(ABC):
                 f"Agent '{self.name}' has no tool registry. "
                 "Initialize with a ToolRegistry to use tools."
             )
-        return self.tool_registry.execute_tool(tool_name, **kwargs)
+        self._log("debug", f"Executing tool: {tool_name}", action="execute_tool", tool_name=tool_name)
+        result = self.tool_registry.execute_tool(tool_name, **kwargs)
+        self._log("debug", f"Tool execution completed: {tool_name}", action="execute_tool_complete", tool_name=tool_name)
+        return result
 
     def add_context_file(
         self,
@@ -250,6 +275,7 @@ class Agent(ABC):
                 "Initialize with a ContextManager to use context management."
             )
         self.context_manager.add_file(file_path, content, metadata)
+        self._log("debug", f"Added context file: {file_path}", action="add_context", file_path=file_path)
 
     def get_context_file(self, file_path: str) -> Optional[Dict[str, Any]]:
         """

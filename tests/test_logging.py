@@ -578,3 +578,110 @@ class TestAgentLoggerIntegration:
 
         # Second message should be in JSON format
         assert '"message": "JSON message"' in logs
+
+
+class TestLifecycleHooks:
+    """Test suite for agent lifecycle introspection hooks."""
+
+    def test_lifecycle_hooks(self):
+        """Test that agent lifecycle events are logged."""
+        from agent_framework.agent import Agent
+        from agent_framework.tools import Tool, ToolRegistry
+        from agent_framework.context import ContextManager
+
+        # Create a concrete agent implementation for testing
+        class TestAgent(Agent):
+            def execute(self, task: str, **kwargs):
+                self._log("info", f"Executing task: {task}", action="execute", task=task)
+                return f"Executed: {task}"
+
+            def process_context(self, context):
+                self._log("debug", "Processing context", action="process_context")
+                return context
+
+            def format_response(self, result):
+                return str(result)
+
+        # Create logger
+        logger = AgentLogger(name="test_agent", level=LogLevel.DEBUG)
+
+        # Create agent with logger
+        tool_registry = ToolRegistry()
+        context_manager = ContextManager()
+        agent = TestAgent(
+            name="test_agent",
+            logger=logger,
+            tool_registry=tool_registry,
+            context_manager=context_manager
+        )
+
+        # Test 1: Agent initialization should be logged
+        agent.initialize()
+        logs = logger.get_logs()
+        assert "initialize" in logs.lower() or "initialized" in logs.lower()
+
+        logger.clear_logs()
+
+        # Test 2: Agent cleanup should be logged
+        agent.cleanup()
+        logs = logger.get_logs()
+        assert "cleanup" in logs.lower()
+
+        logger.clear_logs()
+        agent.initialize()  # Re-initialize for next tests
+
+        # Test 3: Tool registration should be logged
+        class DummyTool(Tool):
+            def __init__(self):
+                super().__init__(name="dummy_tool", description="A dummy tool")
+
+            def execute(self, **kwargs):
+                return "dummy result"
+
+        tool = DummyTool()
+        agent.register_tool(tool)
+        logs = logger.get_logs()
+        assert "tool" in logs.lower() and "dummy_tool" in logs.lower()
+
+        logger.clear_logs()
+
+        # Test 4: Tool execution should be logged
+        agent.execute_tool("dummy_tool")
+        logs = logger.get_logs()
+        assert "execute" in logs.lower() and "dummy_tool" in logs.lower()
+
+        logger.clear_logs()
+
+        # Test 5: Context file addition should be logged
+        agent.add_context_file("test.py", "print('hello')")
+        logs = logger.get_logs()
+        assert "context" in logs.lower() and "test.py" in logs.lower()
+
+        logger.clear_logs()
+
+        # Test 6: Agent execution should be logged
+        result = agent.execute("test task")
+        logs = logger.get_logs()
+        assert "execute" in logs.lower() or "task" in logs.lower()
+
+    def test_agent_without_logger(self):
+        """Test that agents work fine without a logger."""
+        from agent_framework.agent import Agent
+
+        class TestAgent(Agent):
+            def execute(self, task: str, **kwargs):
+                return f"Executed: {task}"
+
+            def process_context(self, context):
+                return context
+
+            def format_response(self, result):
+                return str(result)
+
+        # Create agent without logger - should not raise errors
+        agent = TestAgent(name="test_agent")
+        agent.initialize()
+        result = agent.execute("test task")
+        agent.cleanup()
+
+        assert result == "Executed: test task"
