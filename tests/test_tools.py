@@ -381,3 +381,96 @@ class TestToolDecorator:
             description="Manual instance"
         )
         assert manual_instance.execute(x=1)["decorated"] is True
+
+
+def test_tool_tracing():
+    """Test that tool execution is properly traced with logger."""
+    from agent_framework.logging import AgentLogger
+    import json
+
+    # Create logger with DEBUG level to capture all logs
+    logger = AgentLogger(name="test_logger", level="DEBUG", format="json")
+
+    # Create registry with logger
+    registry = ToolRegistry(logger=logger)
+
+    # Create and register tools
+    calc_tool = CalculatorTool(name="calculator", description="Performs calculations")
+    registry.register(calc_tool)
+
+    # Test successful execution tracing
+    result = registry.execute_tool("calculator", operation="add", a=5, b=3)
+    assert result == 8
+
+    # Parse logs
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+
+    # Should have 2 log entries: start and complete
+    assert len(log_lines) >= 2
+
+    # Parse JSON logs
+    log_entries = [json.loads(line) for line in log_lines]
+
+    # Check start log
+    start_log = log_entries[0]
+    assert start_log["level"] == "DEBUG"
+    assert "Executing tool: calculator" in start_log["message"]
+    assert start_log["extra"]["action"] == "execute_tool_start"
+    assert start_log["extra"]["tool_name"] == "calculator"
+    assert start_log["extra"]["parameters"]["operation"] == "add"
+    assert start_log["extra"]["parameters"]["a"] == 5
+    assert start_log["extra"]["parameters"]["b"] == 3
+
+    # Check completion log
+    complete_log = log_entries[1]
+    assert complete_log["level"] == "DEBUG"
+    assert "Tool execution completed: calculator" in complete_log["message"]
+    assert complete_log["extra"]["action"] == "execute_tool_complete"
+    assert complete_log["extra"]["tool_name"] == "calculator"
+    assert "execution_time" in complete_log["extra"]
+    assert complete_log["extra"]["execution_time"] >= 0
+    assert complete_log["extra"]["success"] is True
+
+    # Clear logs for error test
+    logger.clear_logs()
+
+    # Test error tracing
+    with pytest.raises(ValueError) as exc_info:
+        registry.execute_tool("calculator", operation="divide", a=10, b=0)
+
+    assert "Cannot divide by zero" in str(exc_info.value)
+
+    # Parse error logs
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+
+    # Should have 2 log entries: start and error
+    assert len(log_lines) >= 2
+
+    log_entries = [json.loads(line) for line in log_lines]
+
+    # Check start log
+    start_log = log_entries[0]
+    assert start_log["extra"]["action"] == "execute_tool_start"
+
+    # Check error log
+    error_log = log_entries[1]
+    assert error_log["level"] == "ERROR"
+    assert "Tool execution failed: calculator" in error_log["message"]
+    assert error_log["extra"]["action"] == "execute_tool_error"
+    assert error_log["extra"]["tool_name"] == "calculator"
+    assert "execution_time" in error_log["extra"]
+    assert error_log["extra"]["execution_time"] >= 0
+    assert error_log["extra"]["success"] is False
+    assert "Cannot divide by zero" in error_log["extra"]["error"]
+    assert error_log["extra"]["error_type"] == "ValueError"
+
+    # Test registry without logger (no tracing)
+    registry_no_logger = ToolRegistry()
+    calc_tool_no_logger = CalculatorTool(name="calc2", description="Calculator without logger")
+    registry_no_logger.register(calc_tool_no_logger)
+
+    # Should execute normally without errors even without logger
+    result = registry_no_logger.execute_tool("calc2", operation="add", a=1, b=2)
+    assert result == 3

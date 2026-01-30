@@ -7,7 +7,11 @@ execute to perform specific actions.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, TYPE_CHECKING
+import time
+
+if TYPE_CHECKING:
+    from agent_framework.logging import AgentLogger
 
 try:
     import jsonschema
@@ -34,13 +38,15 @@ class Tool(ABC):
         name: A unique identifier for the tool.
         description: A human-readable description of what the tool does.
         parameters_schema: JSON schema defining the expected parameters.
+        logger: Optional logger for tracing tool execution.
     """
 
     def __init__(
         self,
         name: str,
         description: str,
-        parameters_schema: Optional[Dict[str, Any]] = None
+        parameters_schema: Optional[Dict[str, Any]] = None,
+        logger: Optional["AgentLogger"] = None
     ):
         """
         Initialize the tool with metadata.
@@ -49,10 +55,26 @@ class Tool(ABC):
             name: A unique identifier for this tool.
             description: A human-readable description of the tool's purpose.
             parameters_schema: Optional JSON schema defining expected parameters.
+            logger: Optional logger for tracing tool execution.
         """
         self.name = name
         self.description = description
         self.parameters_schema = parameters_schema or {}
+        self.logger = logger
+
+    def _log(self, level: str, message: str, **extra) -> None:
+        """
+        Internal helper to safely log messages if logger is available.
+
+        Args:
+            level: Log level (debug, info, warning, error, critical).
+            message: The message to log.
+            **extra: Additional context to include in the log.
+        """
+        if self.logger is not None:
+            log_method = getattr(self.logger, level.lower(), None)
+            if log_method is not None:
+                log_method(message, tool=self.name, **extra)
 
     def validate_parameters(self, **kwargs) -> None:
         """
@@ -117,11 +139,34 @@ class ToolRegistry:
     The ToolRegistry maintains a collection of tools and provides methods
     for registration, retrieval, and execution. It ensures tool names are
     unique and provides a centralized access point for all agent tools.
+
+    Attributes:
+        logger: Optional logger for tracing tool registry operations.
     """
 
-    def __init__(self):
-        """Initialize an empty tool registry."""
+    def __init__(self, logger: Optional["AgentLogger"] = None):
+        """
+        Initialize an empty tool registry.
+
+        Args:
+            logger: Optional logger for tracing tool registry operations.
+        """
         self._tools: Dict[str, Tool] = {}
+        self.logger = logger
+
+    def _log(self, level: str, message: str, **extra) -> None:
+        """
+        Internal helper to safely log messages if logger is available.
+
+        Args:
+            level: Log level (debug, info, warning, error, critical).
+            message: The message to log.
+            **extra: Additional context to include in the log.
+        """
+        if self.logger is not None:
+            log_method = getattr(self.logger, level.lower(), None)
+            if log_method is not None:
+                log_method(message, component="ToolRegistry", **extra)
 
     def register(self, tool: Tool) -> None:
         """
@@ -198,10 +243,11 @@ class ToolRegistry:
 
     def execute_tool(self, tool_name: str, **kwargs) -> Any:
         """
-        Execute a tool by name with parameter validation.
+        Execute a tool by name with parameter validation and tracing.
 
         This is a convenience method that retrieves a tool, validates
-        its parameters, and executes it in a single call.
+        its parameters, executes it, and traces the execution (inputs,
+        outputs, timing, and errors).
 
         Args:
             tool_name: The name of the tool to execute.
@@ -214,9 +260,51 @@ class ToolRegistry:
             KeyError: If the tool is not found in the registry.
             ValidationError: If parameters don't match the tool's schema.
         """
+        # Log tool execution start with inputs
+        self._log("debug", f"Executing tool: {tool_name}",
+                  action="execute_tool_start",
+                  tool_name=tool_name,
+                  parameters=kwargs)
+
+        # Get and validate tool
         tool = self.get_tool(tool_name)
         tool.validate_parameters(**kwargs)
-        return tool.execute(**kwargs)
+
+        # Execute with timing and error handling
+        start_time = time.time()
+        error_occurred = False
+        error_message = None
+        result = None
+
+        try:
+            result = tool.execute(**kwargs)
+            execution_time = time.time() - start_time
+
+            # Log successful execution
+            self._log("debug", f"Tool execution completed: {tool_name}",
+                      action="execute_tool_complete",
+                      tool_name=tool_name,
+                      execution_time=execution_time,
+                      success=True)
+
+            return result
+
+        except Exception as e:
+            error_occurred = True
+            error_message = str(e)
+            execution_time = time.time() - start_time
+
+            # Log error
+            self._log("error", f"Tool execution failed: {tool_name}",
+                      action="execute_tool_error",
+                      tool_name=tool_name,
+                      execution_time=execution_time,
+                      error=error_message,
+                      error_type=type(e).__name__,
+                      success=False)
+
+            # Re-raise the exception
+            raise
 
     def clear(self) -> None:
         """Remove all tools from the registry."""
