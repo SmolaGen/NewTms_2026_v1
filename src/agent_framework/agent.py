@@ -7,7 +7,10 @@ execution, context processing, and response formatting.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_framework.tools import Tool, ToolRegistry
 
 
 class Agent(ABC):
@@ -21,18 +24,26 @@ class Agent(ABC):
     Attributes:
         name: A human-readable name for the agent instance.
         config: Optional configuration dictionary for agent-specific settings.
+        tool_registry: Optional tool registry for managing agent capabilities.
     """
 
-    def __init__(self, name: str, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        name: str,
+        config: Optional[Dict[str, Any]] = None,
+        tool_registry: Optional["ToolRegistry"] = None
+    ):
         """
         Initialize the agent with a name and optional configuration.
 
         Args:
             name: A human-readable name for this agent instance.
             config: Optional dictionary of configuration parameters.
+            tool_registry: Optional tool registry for managing agent tools.
         """
         self.name = name
         self.config = config or {}
+        self.tool_registry = tool_registry
         self._initialized = False
 
     @abstractmethod
@@ -131,3 +142,78 @@ class Agent(ABC):
         """
         if self._initialized:
             self._initialized = False
+
+    def register_tool(self, tool: "Tool") -> None:
+        """
+        Register a tool with the agent's tool registry.
+
+        This is a convenience method that delegates to the tool registry's
+        register method.
+
+        Args:
+            tool: The Tool instance to register.
+
+        Raises:
+            RuntimeError: If the agent doesn't have a tool registry.
+            ValueError: If a tool with the same name is already registered.
+            TypeError: If the provided object is not a Tool instance.
+        """
+        if self.tool_registry is None:
+            raise RuntimeError(
+                f"Agent '{self.name}' has no tool registry. "
+                "Initialize with a ToolRegistry to use tools."
+            )
+        self.tool_registry.register(tool)
+
+    def has_tool(self, tool_name: str) -> bool:
+        """
+        Check if a tool is registered with the agent.
+
+        Args:
+            tool_name: The name of the tool to check.
+
+        Returns:
+            True if the tool is registered, False otherwise.
+            Returns False if the agent doesn't have a tool registry.
+        """
+        if self.tool_registry is None:
+            return False
+        return self.tool_registry.has_tool(tool_name)
+
+    def list_tools(self) -> List[str]:
+        """
+        Get a list of all tools available to the agent.
+
+        Returns:
+            A list of tool names in alphabetical order.
+            Returns an empty list if the agent doesn't have a tool registry.
+        """
+        if self.tool_registry is None:
+            return []
+        return self.tool_registry.list_tools()
+
+    def execute_tool(self, tool_name: str, **kwargs) -> Any:
+        """
+        Execute a tool by name with parameter validation.
+
+        This is a convenience method that delegates to the tool registry's
+        execute_tool method.
+
+        Args:
+            tool_name: The name of the tool to execute.
+            **kwargs: Keyword arguments to pass to the tool's execute method.
+
+        Returns:
+            The result of the tool's execution.
+
+        Raises:
+            RuntimeError: If the agent doesn't have a tool registry.
+            KeyError: If the tool is not found in the registry.
+            ValidationError: If parameters don't match the tool's schema.
+        """
+        if self.tool_registry is None:
+            raise RuntimeError(
+                f"Agent '{self.name}' has no tool registry. "
+                "Initialize with a ToolRegistry to use tools."
+            )
+        return self.tool_registry.execute_tool(tool_name, **kwargs)

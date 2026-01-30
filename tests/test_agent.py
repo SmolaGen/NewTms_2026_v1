@@ -160,3 +160,87 @@ class TestAgentAbstraction:
         # Can re-initialize after cleanup
         agent.initialize()
         assert agent._initialized is True
+
+
+class TestAgentWithTools:
+    """Test suite for Agent integration with tool system."""
+
+    def test_agent_with_tools(self):
+        """Test that agents can be initialized with a tool registry."""
+        from agent_framework.tools import ToolRegistry, Tool
+
+        # Create a simple tool for testing
+        class TestTool(Tool):
+            def execute(self, **kwargs):
+                return f"Tool executed with {kwargs}"
+
+        # Create a tool registry and register the tool
+        registry = ToolRegistry()
+        tool = TestTool(name="test_tool", description="A test tool")
+        registry.register(tool)
+
+        # Create an agent with the tool registry
+        agent = ConcreteAgent(name="tool_agent", tool_registry=registry)
+
+        # Verify the agent has the tool registry
+        assert agent.tool_registry is registry
+        assert agent.has_tool("test_tool")
+        assert agent.list_tools() == ["test_tool"]
+
+        # Verify the agent can execute tools
+        result = agent.execute_tool("test_tool", param="value")
+        assert "Tool executed" in result
+        assert "param" in result
+
+    def test_agent_without_tools(self):
+        """Test that agents work without a tool registry."""
+        agent = ConcreteAgent(name="simple_agent")
+
+        # Verify the agent has no tool registry
+        assert agent.tool_registry is None
+        assert agent.list_tools() == []
+        assert not agent.has_tool("anything")
+
+    def test_agent_register_tool(self):
+        """Test that agents can register tools to their registry."""
+        from agent_framework.tools import ToolRegistry, Tool
+
+        class AnotherTool(Tool):
+            def execute(self, **kwargs):
+                return "executed"
+
+        registry = ToolRegistry()
+        agent = ConcreteAgent(name="agent", tool_registry=registry)
+
+        # Register a new tool through the agent
+        tool = AnotherTool(name="another_tool", description="Another test tool")
+        agent.register_tool(tool)
+
+        # Verify the tool is registered
+        assert agent.has_tool("another_tool")
+        assert "another_tool" in agent.list_tools()
+
+    def test_agent_execute_tool_without_registry_raises_error(self):
+        """Test that executing a tool without a registry raises an error."""
+        agent = ConcreteAgent(name="no_tools")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            agent.execute_tool("nonexistent")
+
+        assert "No tool registry" in str(exc_info.value)
+
+    def test_agent_register_tool_without_registry_raises_error(self):
+        """Test that registering a tool without a registry raises an error."""
+        from agent_framework.tools import Tool
+
+        class SomeTool(Tool):
+            def execute(self, **kwargs):
+                return "result"
+
+        agent = ConcreteAgent(name="no_tools")
+        tool = SomeTool(name="some_tool", description="Some tool")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            agent.register_tool(tool)
+
+        assert "No tool registry" in str(exc_info.value)
