@@ -6,10 +6,13 @@ context handling and indexing. It enables agents to maintain awareness
 across large codebases and track relationships between files.
 """
 
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 import os
 import re
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from agent_framework.logging import AgentLogger
 
 
 class ContextManager:
@@ -22,23 +25,44 @@ class ContextManager:
 
     Attributes:
         max_files: Maximum number of files to store (for memory management).
+        logger: Optional logger for introspection and debugging.
         _files: Internal dictionary storing file content and metadata.
         _index: Internal search index mapping tokens to file paths.
     """
 
-    def __init__(self, max_files: int = 1000):
+    def __init__(
+        self,
+        max_files: int = 1000,
+        logger: Optional["AgentLogger"] = None
+    ):
         """
         Initialize the context manager.
 
         Args:
             max_files: Maximum number of files to store in memory. Defaults to 1000.
                 When exceeded, oldest files will be removed (LRU-style).
+            logger: Optional logger for introspection and debugging.
         """
         self.max_files = max_files
+        self.logger = logger
         self._files: Dict[str, Dict[str, Any]] = {}
         self._index: Dict[str, Set[str]] = {}
         self._access_order: List[str] = []  # Track access for LRU
         self._relationships: Dict[str, Dict[str, Set[str]]] = {}  # file -> {type -> set of related files}
+
+    def _log(self, level: str, message: str, **extra) -> None:
+        """
+        Internal helper to safely log messages if logger is available.
+
+        Args:
+            level: Log level (debug, info, warning, error, critical).
+            message: The message to log.
+            **extra: Additional context to include in the log.
+        """
+        if self.logger is not None:
+            log_method = getattr(self.logger, level.lower(), None)
+            if log_method is not None:
+                log_method(message, **extra)
 
     def add_file(
         self,
@@ -96,6 +120,12 @@ class ContextManager:
             self._remove_from_index(oldest_file)
             self._remove_relationships(oldest_file)
             del self._files[oldest_file]
+            self._log("debug", f"Evicted file due to max_files limit: {oldest_file}",
+                     action="evict_file", file_path=oldest_file)
+
+        # Log file addition
+        self._log("debug", f"Added file: {normalized_path}",
+                 action="add_file", file_path=normalized_path, file_size=len(content))
 
     def get_file(self, file_path: str) -> Optional[Dict[str, Any]]:
         """
@@ -111,12 +141,18 @@ class ContextManager:
         normalized_path = str(Path(file_path).as_posix())
 
         if normalized_path not in self._files:
+            self._log("debug", f"File not found: {normalized_path}",
+                     action="get_file_miss", file_path=normalized_path)
             return None
 
         # Update access order (LRU)
         if normalized_path in self._access_order:
             self._access_order.remove(normalized_path)
             self._access_order.append(normalized_path)
+
+        # Log file access
+        self._log("debug", f"Accessed file: {normalized_path}",
+                 action="get_file", file_path=normalized_path)
 
         return self._files[normalized_path].copy()
 
@@ -141,6 +177,10 @@ class ContextManager:
 
         if normalized_path in self._access_order:
             self._access_order.remove(normalized_path)
+
+        # Log file removal
+        self._log("debug", f"Removed file: {normalized_path}",
+                 action="remove_file", file_path=normalized_path)
 
         return True
 
@@ -183,7 +223,13 @@ class ContextManager:
             reverse=True
         )
 
-        return [file_path for file_path, _ in sorted_files[:max_results]]
+        results = [file_path for file_path, _ in sorted_files[:max_results]]
+
+        # Log search query
+        self._log("debug", f"Search query: '{query}'",
+                 action="search", query=query, result_count=len(results), max_results=max_results)
+
+        return results
 
     def get_related_files(
         self,
@@ -250,7 +296,14 @@ class ContextManager:
             reverse=True
         )
 
-        return [file_path for file_path, _ in sorted_files[:max_results]]
+        results = [file_path for file_path, _ in sorted_files[:max_results]]
+
+        # Log relationship traversal
+        self._log("debug", f"Found related files for: {normalized_path}",
+                 action="get_related_files", file_path=normalized_path,
+                 result_count=len(results), explicit_related_count=len(explicit_related))
+
+        return results
 
     def list_files(self) -> List[str]:
         """

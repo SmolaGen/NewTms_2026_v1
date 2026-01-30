@@ -756,3 +756,164 @@ def test_context_window():
 
     # Test 13: Verify metadata is included in context window results
     assert all("metadata" in item for item in context_large)
+
+
+def test_context_logging():
+    """Test that context operations are properly logged for debugging."""
+    from agent_framework.logging import AgentLogger
+    import json
+
+    # Create logger with DEBUG level to capture all logs
+    logger = AgentLogger(name="test_context_logger", level="DEBUG", format="json")
+
+    # Create context manager with logger
+    cm = ContextManager(max_files=3, logger=logger)
+
+    # Test 1: Add file logging
+    cm.add_file("test1.py", "def hello(): pass")
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+    assert len(log_lines) >= 1
+
+    log_entry = json.loads(log_lines[-1])
+    assert log_entry["level"] == "DEBUG"
+    assert "Added file: test1.py" in log_entry["message"]
+    assert log_entry["extra"]["action"] == "add_file"
+    assert log_entry["extra"]["file_path"] == "test1.py"
+    assert "file_size" in log_entry["extra"]
+
+    logger.clear_logs()
+
+    # Test 2: Get file logging (successful access)
+    result = cm.get_file("test1.py")
+    assert result is not None
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+    assert len(log_lines) >= 1
+
+    log_entry = json.loads(log_lines[-1])
+    assert log_entry["level"] == "DEBUG"
+    assert "Accessed file: test1.py" in log_entry["message"]
+    assert log_entry["extra"]["action"] == "get_file"
+    assert log_entry["extra"]["file_path"] == "test1.py"
+
+    logger.clear_logs()
+
+    # Test 3: Get file logging (miss)
+    result = cm.get_file("nonexistent.py")
+    assert result is None
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+    assert len(log_lines) >= 1
+
+    log_entry = json.loads(log_lines[-1])
+    assert log_entry["level"] == "DEBUG"
+    assert "File not found: nonexistent.py" in log_entry["message"]
+    assert log_entry["extra"]["action"] == "get_file_miss"
+    assert log_entry["extra"]["file_path"] == "nonexistent.py"
+
+    logger.clear_logs()
+
+    # Test 4: Search query logging
+    cm.add_file("test2.py", "def goodbye(): pass")
+    cm.add_file("test3.py", "class Hello: pass")
+    logger.clear_logs()
+
+    results = cm.search("hello", max_results=10)
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+
+    # Find search log entry (skip add_file logs)
+    search_log = None
+    for line in log_lines:
+        entry = json.loads(line)
+        if entry["extra"].get("action") == "search":
+            search_log = entry
+            break
+
+    assert search_log is not None
+    assert search_log["level"] == "DEBUG"
+    assert "Search query: 'hello'" in search_log["message"]
+    assert search_log["extra"]["action"] == "search"
+    assert search_log["extra"]["query"] == "hello"
+    assert "result_count" in search_log["extra"]
+    assert "max_results" in search_log["extra"]
+
+    logger.clear_logs()
+
+    # Test 5: Related files logging (relationship traversal)
+    cm.add_file("module.py", "import helper\nclass Module: pass")
+    cm.add_file("helper.py", "def help(): pass")
+    logger.clear_logs()
+
+    related = cm.get_related_files("module.py", max_results=5)
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+
+    # Find get_related_files log entry
+    related_log = None
+    for line in log_lines:
+        entry = json.loads(line)
+        if entry["extra"].get("action") == "get_related_files":
+            related_log = entry
+            break
+
+    assert related_log is not None
+    assert related_log["level"] == "DEBUG"
+    assert "Found related files for: module.py" in related_log["message"]
+    assert related_log["extra"]["action"] == "get_related_files"
+    assert related_log["extra"]["file_path"] == "module.py"
+    assert "result_count" in related_log["extra"]
+    assert "explicit_related_count" in related_log["extra"]
+
+    logger.clear_logs()
+
+    # Test 6: Remove file logging
+    success = cm.remove_file("test1.py")
+    assert success is True
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+    assert len(log_lines) >= 1
+
+    log_entry = json.loads(log_lines[-1])
+    assert log_entry["level"] == "DEBUG"
+    assert "Removed file: test1.py" in log_entry["message"]
+    assert log_entry["extra"]["action"] == "remove_file"
+    assert log_entry["extra"]["file_path"] == "test1.py"
+
+    logger.clear_logs()
+
+    # Test 7: LRU eviction logging (max_files=3, we have 4 files left)
+    cm.add_file("evict_me.py", "old content")  # This should trigger eviction
+
+    logs = logger.get_logs()
+    log_lines = [line for line in logs.strip().split('\n') if line]
+
+    # Find eviction log entry
+    evict_log = None
+    for line in log_lines:
+        entry = json.loads(line)
+        if entry["extra"].get("action") == "evict_file":
+            evict_log = entry
+            break
+
+    assert evict_log is not None
+    assert evict_log["level"] == "DEBUG"
+    assert "Evicted file due to max_files limit" in evict_log["message"]
+    assert evict_log["extra"]["action"] == "evict_file"
+    assert "file_path" in evict_log["extra"]
+
+    logger.clear_logs()
+
+    # Test 8: Context manager without logger should work normally
+    cm_no_logger = ContextManager()
+    cm_no_logger.add_file("test.py", "content")
+    assert cm_no_logger.get_file("test.py") is not None
+    assert cm_no_logger.search("content") == ["test.py"]
+    assert cm_no_logger.remove_file("test.py") is True
