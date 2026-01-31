@@ -277,6 +277,111 @@ class PrioritizationEngine:
 
         return execution_order
 
+    def generate_rationale(
+        self,
+        item_id: str,
+        moscow_category: str
+    ) -> str:
+        """
+        Generate a human-readable rationale for a prioritization decision.
+
+        Args:
+            item_id: The item ID to generate rationale for
+            moscow_category: The MoSCoW category (MUST, SHOULD, COULD, WONT)
+
+        Returns:
+            A human-readable rationale explaining the prioritization decision
+        """
+        self._log("debug", f"Generating rationale for {item_id} with category {moscow_category}")
+
+        # Map string category to enum
+        category_map = {
+            'MUST': MoSCoWCategory.MUST_HAVE,
+            'SHOULD': MoSCoWCategory.SHOULD_HAVE,
+            'COULD': MoSCoWCategory.COULD_HAVE,
+            'WONT': MoSCoWCategory.WONT_HAVE
+        }
+
+        category_enum = category_map.get(moscow_category.upper())
+        if category_enum is None:
+            return f"Invalid MoSCoW category: {moscow_category}"
+
+        # Check if we have cached priority data
+        priority = self._priorities.get(item_id)
+
+        if priority is not None:
+            # Generate rationale based on actual priority data
+            rationale_parts = []
+
+            # Category justification
+            category_justifications = {
+                MoSCoWCategory.MUST_HAVE: "This item is categorized as MUST HAVE due to its critical importance",
+                MoSCoWCategory.SHOULD_HAVE: "This item is categorized as SHOULD HAVE as it provides significant value",
+                MoSCoWCategory.COULD_HAVE: "This item is categorized as COULD HAVE as it offers additional benefits",
+                MoSCoWCategory.WONT_HAVE: "This item is categorized as WON'T HAVE for this release cycle"
+            }
+            rationale_parts.append(category_justifications[category_enum])
+
+            # Business value assessment
+            if priority.business_value >= 80:
+                rationale_parts.append(f"with exceptionally high business value (score: {priority.business_value}/100)")
+            elif priority.business_value >= 60:
+                rationale_parts.append(f"with strong business value (score: {priority.business_value}/100)")
+            elif priority.business_value >= 40:
+                rationale_parts.append(f"with moderate business value (score: {priority.business_value}/100)")
+            else:
+                rationale_parts.append(f"with limited business value (score: {priority.business_value}/100)")
+
+            # Technical complexity consideration
+            if priority.technical_complexity >= 80:
+                rationale_parts.append(f"However, it has high technical complexity (score: {priority.technical_complexity}/100)")
+            elif priority.technical_complexity >= 60:
+                rationale_parts.append(f"It has moderate technical complexity (score: {priority.technical_complexity}/100)")
+            else:
+                rationale_parts.append(f"It has relatively low technical complexity (score: {priority.technical_complexity}/100)")
+
+            # Risk assessment
+            if priority.risk_level >= 60:
+                rationale_parts.append(f"and carries significant risk (score: {priority.risk_level}/100)")
+            elif priority.risk_level >= 30:
+                rationale_parts.append(f"with manageable risk (score: {priority.risk_level}/100)")
+            elif priority.risk_level > 0:
+                rationale_parts.append(f"with low risk (score: {priority.risk_level}/100)")
+
+            # Overall priority score
+            rationale_parts.append(f"The overall priority score is {priority.priority_score}/100.")
+
+            rationale = ". ".join(rationale_parts)
+
+        else:
+            # Generate generic rationale without cached data
+            category_rationales = {
+                MoSCoWCategory.MUST_HAVE: (
+                    f"Item '{item_id}' is categorized as MUST HAVE, indicating it is essential "
+                    "for the project's success and must be delivered in this release. "
+                    "MUST HAVE items are non-negotiable and critical to core functionality."
+                ),
+                MoSCoWCategory.SHOULD_HAVE: (
+                    f"Item '{item_id}' is categorized as SHOULD HAVE, indicating it is important "
+                    "but not vital for this release. SHOULD HAVE items add significant value "
+                    "and should be included if possible, but the project can succeed without them."
+                ),
+                MoSCoWCategory.COULD_HAVE: (
+                    f"Item '{item_id}' is categorized as COULD HAVE, indicating it is desirable "
+                    "but not necessary. COULD HAVE items will be included if time and resources "
+                    "permit, but can be easily deferred to a future release."
+                ),
+                MoSCoWCategory.WONT_HAVE: (
+                    f"Item '{item_id}' is categorized as WON'T HAVE for this release, meaning "
+                    "it has been agreed that it will not be delivered in this timeframe. "
+                    "It may be reconsidered for future releases."
+                )
+            }
+            rationale = category_rationales[category_enum]
+
+        self._log("info", f"Generated rationale for {item_id}", rationale_length=len(rationale))
+        return rationale
+
     def __repr__(self) -> str:
         """Return a string representation of the engine."""
         return f"PrioritizationEngine(cached_priorities={len(self._priorities)})"

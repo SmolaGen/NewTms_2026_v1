@@ -1,0 +1,6 @@
+#!/Users/alsmolentsev/afwdawdwadDAWDAWDAWD/1/.auto-claude/worktrees/tasks/003-strategic-roadmap-generation-from-codebase-discove/.venv/bin/python3
+import sys
+from pygments.cmdline import main
+if __name__ == '__main__':
+    sys.argv[0] = sys.argv[0].removesuffix('.exe')
+    sys.exit(main())
