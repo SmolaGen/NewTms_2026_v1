@@ -338,6 +338,73 @@ class CompetitiveAnalyzer(Agent):
             "count": len(gaps)
         }
 
+    def identify_gaps(
+        self,
+        competitors: List[Competitor],
+        focus_area: Optional[str] = None
+    ) -> List[str]:
+        """
+        Identify market gaps based on competitor analysis.
+
+        This method analyzes a list of competitors and their associated pain points
+        to identify market gaps and opportunities. It processes high-severity pain
+        points and generates actionable gap descriptions.
+
+        Args:
+            competitors: List of Competitor objects to analyze. Can be empty.
+            focus_area: Optional area to focus analysis on (filters results).
+
+        Returns:
+            List of market gap descriptions as strings. Returns empty list if
+            no gaps are identified or no market data is loaded.
+
+        Raises:
+            ValueError: If competitors parameter is None.
+        """
+        if competitors is None:
+            raise ValueError("competitors parameter cannot be None")
+
+        # If no market data loaded and no competitors provided, return empty list
+        if self._market_data is None and not competitors:
+            self._log(
+                "debug",
+                "No market data or competitors available for gap analysis",
+                action="identify_gaps"
+            )
+            return []
+
+        gaps = []
+
+        # If we have market data, use the internal method
+        if self._market_data is not None:
+            result = self._identify_market_gaps(focus_area=focus_area)
+            if "market_gaps" in result:
+                gaps = result["market_gaps"]
+        else:
+            # Analyze provided competitors directly
+            for competitor in competitors:
+                for weakness in competitor.weaknesses:
+                    # Create gap description from weakness
+                    gap_desc = f"{competitor.name}: {weakness}"
+
+                    # Filter by focus area if specified
+                    if focus_area:
+                        if focus_area.lower() in gap_desc.lower():
+                            gaps.append(gap_desc)
+                    else:
+                        gaps.append(gap_desc)
+
+        # Log gap identification
+        self._log(
+            "info",
+            f"Identified {len(gaps)} market gaps",
+            count=len(gaps),
+            focus_area=focus_area,
+            competitor_count=len(competitors)
+        )
+
+        return gaps
+
     def extract_pain_points_from_competitor(
         self,
         competitor: Competitor
