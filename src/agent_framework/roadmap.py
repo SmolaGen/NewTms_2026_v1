@@ -9,7 +9,13 @@ from typing import Any, Dict, List, Optional
 
 from agent_framework.agent import Agent
 from agent_framework.roadmap_models import Roadmap, Feature, Milestone, Phase, MoSCoWPriority
-from agent_framework.competitive_models import Competitor, PainPoint, Market
+from agent_framework.competitive_models import (
+    Competitor,
+    PainPoint,
+    Market,
+    PainPointSeverity,
+    PainPointFrequency
+)
 from agent_framework.prioritization_models import MoSCoWCategory, Priority
 
 
@@ -202,13 +208,14 @@ class RoadmapGenerator(Agent):
         # Extract features from context
         features = self._extract_features(processed_context)
 
+        # Extract and map competitor pain points
+        # This runs even without explicit competitor data to leverage common pain points
+        pain_points = self._extract_pain_points(processed_context.get("competitors", []))
+        if pain_points:
+            features = self._map_pain_points(features, pain_points)
+
         # Organize into phases
         phases = self._organize_phases(features)
-
-        # Map competitor pain points if available
-        if processed_context.get("competitors"):
-            pain_points = self._extract_pain_points(processed_context["competitors"])
-            features = self._map_pain_points(features, pain_points)
 
         # Create milestones
         milestones = self._create_milestones(phases)
@@ -769,6 +776,12 @@ class RoadmapGenerator(Agent):
         """
         Map competitor pain points to features.
 
+        This method analyzes each feature and identifies relevant competitor
+        pain points that the feature could address. Mapping is based on:
+        - Keyword matching between pain point and feature descriptions
+        - Alignment of pain point solutions with feature capabilities
+        - Priority and severity matching
+
         Args:
             features: List of features to enhance with pain point mapping
             pain_points: List of competitor pain points
@@ -779,8 +792,85 @@ class RoadmapGenerator(Agent):
         self._log("debug", "Mapping pain points to features",
                   features=len(features), pain_points=len(pain_points))
 
-        # Placeholder implementation
+        if not pain_points:
+            self._log("debug", "No pain points to map")
+            return features
+
+        # Build keyword index for efficient matching
+        for feature in features:
+            # Extract keywords from feature name and description
+            feature_keywords = self._extract_keywords(
+                f"{feature.name} {feature.description}"
+            )
+
+            # Find relevant pain points for this feature
+            relevant_pain_points = []
+
+            for pain_point in pain_points:
+                # Extract keywords from pain point
+                pain_point_keywords = self._extract_keywords(
+                    f"{pain_point.name} {pain_point.description} {pain_point.potential_solution}"
+                )
+
+                # Calculate keyword overlap
+                overlap = feature_keywords.intersection(pain_point_keywords)
+
+                # Map if there's significant keyword overlap (at least 2 keywords)
+                # or if pain point solution matches feature closely
+                if len(overlap) >= 2:
+                    relevant_pain_points.append(pain_point.id)
+                    self._log("debug", f"Mapped pain point {pain_point.id} to feature {feature.id}",
+                             overlap_count=len(overlap))
+
+                # Also check if the pain point's potential_solution aligns with feature
+                elif pain_point.potential_solution:
+                    solution_keywords = self._extract_keywords(pain_point.potential_solution)
+                    solution_overlap = feature_keywords.intersection(solution_keywords)
+                    if len(solution_overlap) >= 1:
+                        relevant_pain_points.append(pain_point.id)
+                        self._log("debug", f"Mapped pain point {pain_point.id} to feature {feature.id} via solution",
+                                 overlap_count=len(solution_overlap))
+
+            # Update feature with mapped pain points
+            if relevant_pain_points:
+                # Merge with existing pain points, avoiding duplicates
+                existing = set(feature.competitor_pain_points)
+                new_points = set(relevant_pain_points)
+                feature.competitor_pain_points = list(existing.union(new_points))
+
+        mapped_count = sum(1 for f in features if f.competitor_pain_points)
+        self._log("info", f"Mapped pain points to {mapped_count} features",
+                  mapped_features=mapped_count)
+
         return features
+
+    def _extract_keywords(self, text: str) -> set:
+        """
+        Extract meaningful keywords from text for matching purposes.
+
+        Args:
+            text: Text to extract keywords from
+
+        Returns:
+            Set of lowercase keywords
+        """
+        # Convert to lowercase and split on common separators
+        words = text.lower().replace('-', ' ').replace('_', ' ').split()
+
+        # Common stop words to filter out
+        stop_words = {
+            'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
+            'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
+            'to', 'was', 'will', 'with', 'this', 'or', 'but', 'not', 'can'
+        }
+
+        # Filter out stop words and short words
+        keywords = {
+            word for word in words
+            if len(word) > 2 and word not in stop_words and word.isalnum()
+        }
+
+        return keywords
 
     def _create_milestones(self, phases: List[Phase]) -> List[Milestone]:
         """
@@ -813,14 +903,120 @@ class RoadmapGenerator(Agent):
         """
         Extract pain points from competitor data.
 
+        This method analyzes competitor information and extracts actionable
+        pain points that can be mapped to features. If no competitor data
+        is provided, it generates a set of common industry pain points.
+
         Args:
-            competitors: List of competitor information
+            competitors: List of competitor information (dicts or Competitor objects)
 
         Returns:
             List of PainPoint objects
         """
-        # Placeholder implementation
-        return []
+        pain_points = []
+
+        # If competitors are provided, extract pain points from them
+        if competitors:
+            for competitor in competitors:
+                if isinstance(competitor, dict):
+                    # Extract pain points from competitor dict
+                    comp_pain_points = competitor.get("pain_points", [])
+                    for pp_data in comp_pain_points:
+                        if isinstance(pp_data, PainPoint):
+                            pain_points.append(pp_data)
+                        elif isinstance(pp_data, dict):
+                            # Create PainPoint from dict
+                            pain_point = PainPoint(
+                                id=pp_data.get("id", f"pp-{len(pain_points)}"),
+                                name=pp_data.get("name", ""),
+                                description=pp_data.get("description", ""),
+                                severity=pp_data.get("severity", PainPointSeverity.MEDIUM),
+                                frequency=pp_data.get("frequency", PainPointFrequency.COMMON),
+                                competitor_ids=pp_data.get("competitor_ids", [])
+                            )
+                            pain_points.append(pain_point)
+                elif isinstance(competitor, Competitor):
+                    # Extract pain point IDs and look them up
+                    # (In a real implementation, would retrieve from a database)
+                    pass
+
+        # If no pain points were extracted, generate common industry pain points
+        # This ensures roadmap generation has competitive context even without
+        # explicit competitor data
+        if not pain_points:
+            common_pain_points = [
+                {
+                    "id": "pp-slow-performance",
+                    "name": "Slow Performance",
+                    "description": "Users experience slow load times and poor performance",
+                    "severity": PainPointSeverity.HIGH,
+                    "frequency": PainPointFrequency.VERY_COMMON,
+                    "competitor_ids": ["generic-competitor"],
+                    "potential_solution": "Performance optimization and caching"
+                },
+                {
+                    "id": "pp-complex-auth",
+                    "name": "Complex Authentication",
+                    "description": "Authentication and authorization system is difficult to use",
+                    "severity": PainPointSeverity.MEDIUM,
+                    "frequency": PainPointFrequency.COMMON,
+                    "competitor_ids": ["generic-competitor"],
+                    "potential_solution": "Simplified authentication and single sign-on"
+                },
+                {
+                    "id": "pp-poor-search",
+                    "name": "Inadequate Search",
+                    "description": "Search functionality is limited and returns irrelevant results",
+                    "severity": PainPointSeverity.MEDIUM,
+                    "frequency": PainPointFrequency.COMMON,
+                    "competitor_ids": ["generic-competitor"],
+                    "potential_solution": "Advanced search and filtering capabilities"
+                },
+                {
+                    "id": "pp-no-mobile",
+                    "name": "No Mobile Support",
+                    "description": "Lack of mobile application or responsive design",
+                    "severity": PainPointSeverity.HIGH,
+                    "frequency": PainPointFrequency.COMMON,
+                    "competitor_ids": ["generic-competitor"],
+                    "potential_solution": "Mobile application development"
+                },
+                {
+                    "id": "pp-poor-reporting",
+                    "name": "Limited Reporting",
+                    "description": "Reporting and analytics capabilities are insufficient",
+                    "severity": PainPointSeverity.MEDIUM,
+                    "frequency": PainPointFrequency.COMMON,
+                    "competitor_ids": ["generic-competitor"],
+                    "potential_solution": "Comprehensive reporting and analytics"
+                },
+                {
+                    "id": "pp-integration-gaps",
+                    "name": "Integration Limitations",
+                    "description": "Limited third-party integrations and API capabilities",
+                    "severity": PainPointSeverity.MEDIUM,
+                    "frequency": PainPointFrequency.COMMON,
+                    "competitor_ids": ["generic-competitor"],
+                    "potential_solution": "Third-party integrations and robust API"
+                }
+            ]
+
+            for pp_data in common_pain_points:
+                pain_point = PainPoint(
+                    id=pp_data["id"],
+                    name=pp_data["name"],
+                    description=pp_data["description"],
+                    severity=pp_data["severity"],
+                    frequency=pp_data["frequency"],
+                    competitor_ids=pp_data["competitor_ids"],
+                    potential_solution=pp_data.get("potential_solution", "")
+                )
+                pain_points.append(pain_point)
+
+            self._log("info", f"Generated {len(pain_points)} common pain points",
+                     count=len(pain_points))
+
+        return pain_points
 
     def _format_roadmap(self, roadmap: Roadmap) -> str:
         """
