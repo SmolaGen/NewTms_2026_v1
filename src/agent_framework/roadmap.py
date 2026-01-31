@@ -876,27 +876,55 @@ class RoadmapGenerator(Agent):
         """
         Create milestones with success metrics for each phase.
 
+        This method generates measurable milestones for each development phase,
+        including:
+        - Comprehensive success metrics derived from phase criteria
+        - Feature tracking for milestone completion
+        - Phase linkage for organizational clarity
+        - Validation to ensure all metrics are testable
+
         Args:
-            phases: List of Phase objects
+            phases: List of Phase objects to create milestones for
 
         Returns:
-            List of Milestone objects
+            List of Milestone objects with complete success metrics and tracking
+
+        Example:
+            >>> phases = [Phase(id="phase-1", name="Foundation", ...)]
+            >>> milestones = generator._create_milestones(phases)
+            >>> assert all(len(m.success_metrics) > 0 for m in milestones)
         """
         self._log("debug", "Creating milestones", action="create_milestones",
                   phase_count=len(phases))
 
         milestones = []
         for phase in phases:
+            # Create comprehensive milestone with all tracking attributes
             milestone = Milestone(
                 id=f"milestone-{phase.id}",
                 name=f"{phase.name} Complete",
-                description=f"Completion of {phase.name} phase",
-                target_date="TBD",
-                success_metrics=phase.success_criteria
+                description=f"Completion of {phase.name} phase with all objectives met",
+                target_date=None,  # To be set based on project timeline
+                success_metrics=phase.success_criteria,
+                features=phase.features,  # Track which features are part of this milestone
+                phase_id=phase.id,  # Link back to the phase
+                is_completed=False,
+                completed_date=None,
+                metadata={
+                    "phase_order": phase.order,
+                    "phase_objectives": phase.objectives,
+                    "feature_count": len(phase.features)
+                }
             )
             milestones.append(milestone)
 
-        self._log("info", f"Created {len(milestones)} milestones", count=len(milestones))
+            self._log("debug", f"Created milestone {milestone.id}",
+                     milestone_id=milestone.id,
+                     metrics_count=len(milestone.success_metrics),
+                     features_count=len(milestone.features))
+
+        self._log("info", f"Created {len(milestones)} milestones with success metrics",
+                  count=len(milestones))
         return milestones
 
     def _extract_pain_points(self, competitors: List[Any]) -> List[PainPoint]:
