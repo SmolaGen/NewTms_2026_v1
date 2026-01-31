@@ -228,6 +228,28 @@ class RoadmapGenerator(Agent):
 
         return roadmap
 
+    def analyze_codebase_state(self) -> Dict[str, Any]:
+        """
+        Analyze the current state of the codebase using ContextManager.
+
+        This public method provides a convenient interface to analyze the codebase
+        without needing to pass a context parameter. It uses the agent's
+        ContextManager to gather statistics and relationships.
+
+        Returns:
+            Dictionary with codebase analysis results including:
+                - file_count: Number of files in context
+                - total_size: Total size of all files in bytes
+                - components: List of identified components
+                - dependencies: List of file dependencies/relationships
+
+        Example:
+            >>> rg = RoadmapGenerator('rg', context_manager=ContextManager())
+            >>> result = rg.analyze_codebase_state()
+            >>> print(result['codebase_state']['file_count'])
+        """
+        return self._analyze_codebase_state({})
+
     def _analyze_codebase_state(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze the current state of the codebase.
@@ -242,12 +264,22 @@ class RoadmapGenerator(Agent):
 
         if self.context_manager:
             stats = self.context_manager.get_stats()
+
+            # Get all files to analyze components and dependencies
+            all_files = self.list_context_files()
+
+            # Extract components (Python modules, classes, etc.)
+            components = self._identify_components(all_files)
+
+            # Extract dependencies from relationships
+            dependencies = self._extract_dependencies(all_files)
+
             return {
                 "codebase_state": {
                     "file_count": stats.get("file_count", 0),
                     "total_size": stats.get("total_size", 0),
-                    "components": [],
-                    "dependencies": []
+                    "components": components,
+                    "dependencies": dependencies
                 }
             }
 
@@ -261,6 +293,48 @@ class RoadmapGenerator(Agent):
                 "dependencies": codebase.get("dependencies", [])
             }
         }
+
+    def _identify_components(self, files: List[str]) -> List[str]:
+        """
+        Identify components from the list of files.
+
+        Args:
+            files: List of file paths
+
+        Returns:
+            List of component identifiers (e.g., module names)
+        """
+        components = []
+        for file_path in files:
+            # Extract component name from file path (e.g., src/module/file.py -> module)
+            if '/' in file_path:
+                parts = file_path.split('/')
+                if len(parts) > 1:
+                    # Get the directory name before the file
+                    component = parts[-2] if parts[-2] != 'src' else parts[-1].replace('.py', '')
+                    if component not in components:
+                        components.append(component)
+        return components
+
+    def _extract_dependencies(self, files: List[str]) -> List[str]:
+        """
+        Extract dependencies from file relationships.
+
+        Args:
+            files: List of file paths
+
+        Returns:
+            List of dependency relationships
+        """
+        dependencies = []
+        if self.context_manager:
+            for file_path in files:
+                related = self.context_manager.get_related_files(file_path, max_results=3)
+                for related_file in related:
+                    dep = f"{file_path} -> {related_file}"
+                    if dep not in dependencies:
+                        dependencies.append(dep)
+        return dependencies
 
     def _extract_features(self, context: Dict[str, Any]) -> List[Feature]:
         """
