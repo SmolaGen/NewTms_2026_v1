@@ -120,8 +120,8 @@ class DependencyGraph:
         edges: Dictionary mapping item IDs to lists of dependent item IDs
         metadata: Additional graph metadata
     """
-    graph_id: str
-    name: str
+    graph_id: str = "default"
+    name: str = "Dependency Graph"
     description: str = ""
     nodes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     edges: Dict[str, List[str]] = field(default_factory=dict)
@@ -347,3 +347,13 @@ class DependencyGraph:
                     errors.append(f"Node {node_id} depends on non-existent node {dep_id}")
 
         return len(errors) == 0, errors
+
+    def is_valid(self) -> bool:
+        """
+        Check if the dependency graph is valid.
+
+        Returns:
+            True if the graph is valid (no cycles, no dangling references)
+        """
+        is_valid, _ = self.validate()
+        return is_valid

@@ -17,6 +17,9 @@ from agent_framework.roadmap_models import Feature, MoSCoWPriority
 if TYPE_CHECKING:
     from agent_framework.logging import AgentLogger
 
+# Export DependencyGraph so it can be imported from this module
+__all__ = ['PrioritizationEngine', 'DependencyGraph', 'Priority', 'MoSCoWCategory']
+
 
 class PrioritizationEngine:
     """
