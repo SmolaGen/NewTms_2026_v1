@@ -9,6 +9,7 @@ This framework addresses fundamental limitations that competitors (GitHub Copilo
 ## Features
 
 - **Custom Agent Types**: Build specialized AI agents with modular tool system
+- **Strategic Roadmap Generation**: Generate prioritized development roadmaps from codebase analysis and competitive intelligence
 - **Context Management**: Efficiently handle multi-file codebases (100+ files)
 - **Coherent Reasoning**: Maintain context across 10+ related files
 - **Comprehensive Logging**: Built-in introspection and debugging capabilities
@@ -68,6 +69,72 @@ agent.cleanup()
 ```
 
 For more examples, see the [examples/](examples/) directory.
+
+### Strategic Roadmap Generation
+
+Generate prioritized development roadmaps with MoSCoW prioritization, competitor pain point mapping, and measurable milestones:
+
+```python
+from agent_framework.roadmap import RoadmapGenerator
+from agent_framework.context import ContextManager
+from agent_framework.logging import AgentLogger
+
+# Create components
+logger = AgentLogger("roadmap-generator")
+context_manager = ContextManager(max_files=100, logger=logger)
+
+# Create roadmap generator
+generator = RoadmapGenerator(
+    name="Strategic Roadmap Generator",
+    context_manager=context_manager,
+    logger=logger
+)
+
+generator.initialize()
+
+# Generate a complete roadmap
+roadmap = generator.generate_roadmap({
+    "name": "Project Alpha Roadmap",
+    "description": "Strategic development plan",
+    "requirements": {
+        "feat-auth": {
+            "name": "User Authentication",
+            "description": "Secure authentication system",
+            "moscow_priority": "MUST",
+            "business_value": 95
+        }
+    }
+})
+
+# Display roadmap summary
+print(f"Generated roadmap: {roadmap.name}")
+print(f"Features: {len(roadmap.features)} organized in {len(roadmap.phases)} phases")
+print(f"Milestones: {len(roadmap.milestones)}")
+
+# View features by priority
+for feature in roadmap.features:
+    print(f"  [{feature.moscow_priority.value}] {feature.name}")
+    if feature.competitor_pain_points:
+        print(f"    Addresses: {len(feature.competitor_pain_points)} competitor pain points")
+
+# View phases
+for phase in roadmap.phases:
+    print(f"\nPhase {phase.order}: {phase.name}")
+    print(f"  Objectives: {', '.join(phase.objectives)}")
+    print(f"  Features: {len(phase.features)}")
+
+generator.cleanup()
+```
+
+The RoadmapGenerator automatically:
+- Extracts 15+ features from requirements and codebase analysis
+- Organizes features into 4+ logical development phases
+- Applies MoSCoW prioritization (Must-have, Should-have, Could-have, Won't-have)
+- Maps competitor pain points to relevant features
+- Generates measurable milestones with success metrics
+- Validates dependencies to prevent impossible feature sequences
+
+See [examples/roadmap_generator.py](examples/roadmap_generator.py) for more detailed examples.
 
 ## Requirements
 
