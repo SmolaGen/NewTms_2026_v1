@@ -5,6 +5,7 @@ This module provides the RoadmapGenerator agent that orchestrates codebase analy
 competitive intelligence, and prioritization to generate strategic development roadmaps.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agent_framework.agent import Agent
@@ -222,6 +223,7 @@ class RoadmapGenerator(Agent):
 
         # Build the roadmap
         roadmap = Roadmap(
+            id=context.get("id", f"roadmap-{datetime.now().strftime('%Y%m%d-%H%M%S')}"),
             name=context.get("name", "Development Roadmap"),
             description=context.get("description", "Strategic development roadmap"),
             features=features,
@@ -395,21 +397,25 @@ class RoadmapGenerator(Agent):
         market = context.get("market", {})
 
         # Extract features from explicit requirements if provided
-        for req_id, req_data in requirements.items():
-            feature = Feature(
-                id=req_id,
-                name=req_data.get("name", f"Feature {req_id}"),
-                description=req_data.get("description", ""),
-                moscow_priority=req_data.get("moscow_priority", MoSCoWPriority.SHOULD),
-                priority_rationale=req_data.get("priority_rationale", "User-defined requirement"),
-                business_value=req_data.get("business_value", 50),
-                technical_complexity=req_data.get("technical_complexity", 50),
-                estimated_effort_days=req_data.get("estimated_effort_days", 5.0),
-                dependencies=req_data.get("dependencies", []),
-                competitor_pain_points=req_data.get("competitor_pain_points", []),
-                success_metrics=req_data.get("success_metrics", [])
-            )
-            features.append(feature)
+        # Only process if requirements contains feature-like objects (has name/description keys)
+        if isinstance(requirements, dict):
+            for req_id, req_data in requirements.items():
+                # Check if this is a feature object (has 'name' or 'description' keys)
+                if isinstance(req_data, dict) and ('name' in req_data or 'description' in req_data):
+                    feature = Feature(
+                        id=req_id,
+                        name=req_data.get("name", f"Feature {req_id}"),
+                        description=req_data.get("description", ""),
+                        moscow_priority=req_data.get("moscow_priority", MoSCoWPriority.SHOULD),
+                        priority_rationale=req_data.get("priority_rationale", "User-defined requirement"),
+                        business_value=req_data.get("business_value", 50),
+                        technical_complexity=req_data.get("technical_complexity", 50),
+                        estimated_effort_days=req_data.get("estimated_effort_days", 5.0),
+                        dependencies=req_data.get("dependencies", []),
+                        competitor_pain_points=req_data.get("competitor_pain_points", []),
+                        success_metrics=req_data.get("success_metrics", [])
+                    )
+                    features.append(feature)
 
         # Generate standard roadmap features to ensure minimum 15 features
         # These represent common development needs for any strategic roadmap

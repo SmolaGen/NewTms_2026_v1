@@ -192,9 +192,9 @@ def main():
     features = agent.execute("extract_features", context=context)
     print(f"Extracted {len(features)} features:")
     for i, feature in enumerate(features[:5], 1):  # Show first 5
-        print(f"  {i}. {feature.name} ({feature.priority.value})")
+        print(f"  {i}. {feature.name} ({feature.moscow_priority.value})")
         print(f"     Business Value: {feature.business_value}/100")
-        print(f"     Effort: {feature.estimated_effort} person-days")
+        print(f"     Effort: {feature.estimated_effort_days} person-days")
     if len(features) > 5:
         print(f"  ... and {len(features) - 5} more features")
     print()
@@ -214,7 +214,14 @@ def main():
     print(f"Found {len(mapped_features)} features addressing competitor pain points:")
     for i, feature in enumerate(mapped_features[:3], 1):  # Show first 3
         print(f"  {i}. {feature.name}")
-        print(f"     Addresses: {', '.join([pp.name for pp in feature.competitor_pain_points])}")
+        # Find the actual pain point names from the pain_points list
+        pain_point_names = []
+        for pp_id in feature.competitor_pain_points:
+            for pp in pain_points:
+                if pp.id == pp_id:
+                    pain_point_names.append(pp.name)
+                    break
+        print(f"     Addresses: {', '.join(pain_point_names)}")
     if len(mapped_features) > 3:
         print(f"  ... and {len(mapped_features) - 3} more features")
     print()
@@ -265,11 +272,11 @@ def main():
     )
 
     # Check: MoSCoW prioritization
-    prioritized = all(hasattr(f, 'priority') for f in roadmap.features)
+    prioritized = all(hasattr(f, 'moscow_priority') and hasattr(f, 'priority_rationale') for f in roadmap.features)
     validation_results.append(
-        f"✓ MoSCoW prioritization: All features prioritized"
+        f"✓ MoSCoW prioritization: All features prioritized with rationale"
         if prioritized
-        else f"✗ MoSCoW prioritization: Missing priorities"
+        else f"✗ MoSCoW prioritization: Missing priorities or rationale"
     )
 
     # Check: Success metrics
