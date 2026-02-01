@@ -1,100 +1,151 @@
-# Project Documentation
+# Extensible AI Agent Framework
 
-A comprehensive documentation scaffolding system for modern software projects.
+Core framework for building reliable AI agents with proper abstractions, context management, and tool integration capabilities.
 
 ## Overview
 
-This project provides automated generation of project documentation structure, including README, contribution guidelines, architecture docs, and API documentation templates. It addresses the common challenge of rudimentary or missing project documentation by reducing documentation friction compared to manual setup.
+This framework addresses fundamental limitations that competitors (GitHub Copilot, Cursor, Windsurf) struggle with - inconsistent code quality and limited context awareness. A solid framework foundation enables superior multi-file context handling and reduces hallucinations.
 
 ## Features
 
-- **README Generation**: Project overview and quick start guides
-- **Contribution Guidelines**: Clear workflows for contributors
-- **Architecture Documentation**: Technical design and system overview templates
-- **API Documentation**: Structured API reference scaffolding
-- **Setup Instructions**: Installation and configuration guides
-- **Troubleshooting**: Common issues and solutions
+- **Custom Agent Types**: Build specialized AI agents with modular tool system
+- **Context Management**: Efficiently handle multi-file codebases (100+ files)
+- **Coherent Reasoning**: Maintain context across 10+ related files
+- **Comprehensive Logging**: Built-in introspection and debugging capabilities
+- **Performance Optimized**: Benchmarked for context processing efficiency
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+For development:
+
+```bash
+pip install -e ".[dev]"
+```
 
 ## Quick Start
 
-### Prerequisites
+Here's a simple example to get you started:
 
-- Git installed on your system
-- Basic understanding of Markdown
+```python
+from agent_framework import Agent
+from agent_framework.logging import AgentLogger
 
-### Installation
+class SimpleAgent(Agent):
+    """A simple text processing agent."""
 
-1. Clone the repository:
+    def execute(self, task: str, **kwargs) -> dict:
+        """Execute a task."""
+        text = kwargs.get("text", "")
+
+        if task == "count_words":
+            return {"word_count": len(text.split())}
+        elif task == "uppercase":
+            return {"result": text.upper()}
+
+        return {"error": f"Unknown task: {task}"}
+
+    def process_context(self, context: dict) -> dict:
+        """Process context information."""
+        return {"text": context.get("text", "")}
+
+    def format_response(self, result: any) -> str:
+        """Format the result."""
+        return str(result)
+
+# Create and use the agent
+logger = AgentLogger("simple-agent")
+agent = SimpleAgent("my-agent", logger=logger)
+agent.initialize()
+
+result = agent.execute("count_words", text="Hello World")
+print(agent.format_response(result))  # {"word_count": 2}
+
+agent.cleanup()
+```
+
+For more examples, see the [examples/](examples/) directory.
+
+## Requirements
+
+- Python 3.8 or higher
+
+## Development
+
+### Running Tests
+
 ```bash
-git clone <repository-url>
-cd <project-directory>
+pytest tests/ -v
 ```
 
-2. Initialize the documentation structure:
+### Code Coverage
+
 ```bash
-# Documentation files will be created in the project root and docs/ directory
+pytest tests/ --cov=src/agent_framework --cov-report=term-missing
 ```
 
-### Usage
+### Code Formatting
 
-The documentation scaffolding creates the following structure:
-
-```
-.
-├── README.md                    # Project overview and quick start
-├── CONTRIBUTING.md              # Contribution guidelines
-└── docs/
-    ├── ARCHITECTURE.md          # System architecture
-    ├── API.md                   # API documentation
-    ├── SETUP.md                 # Detailed setup instructions
-    └── TROUBLESHOOTING.md       # Common issues and solutions
+```bash
+black src/ tests/
 ```
 
-## Documentation Structure
+## Architecture
 
-### Core Documentation
-- **README.md**: First point of contact for new users and developers
-- **CONTRIBUTING.md**: Guidelines for contributing to the project
+The framework consists of several core components:
 
-### Technical Documentation
-- **Architecture**: System design, component relationships, and technical decisions
-- **API**: Endpoints, request/response formats, and usage examples
-- **Setup**: Detailed installation, configuration, and deployment instructions
-- **Troubleshooting**: Common problems, error messages, and solutions
+- **Agent Base Class**: Abstract base for creating custom agents with a clean interface
+- **Tool System**: Modular tool registration and execution with parameter validation
+- **Context Manager**: Multi-file codebase indexing with relationship tracking and LRU eviction
+- **Logging System**: Structured logging with multiple formats (text/JSON) and introspection hooks
 
-## User Stories
+Each component is designed to be:
+- **Independent**: Can be used separately or combined as needed
+- **Extensible**: Easy to subclass and customize
+- **Observable**: Comprehensive logging throughout
+- **Performant**: Optimized for efficiency with large codebases
 
-- **As a new developer**, I want clear documentation so that I can quickly understand the project and contribute
-- **As a project maintainer**, I want documentation scaffolding so that I don't start from scratch
+See [Architecture Overview](docs/architecture.md) for detailed design documentation.
 
-## Project Goals
+## Documentation
 
-1. Reduce documentation setup time from hours to minutes
-2. Provide industry-standard documentation templates
-3. Ensure consistent documentation structure across projects
-4. Lower the barrier to entry for new contributors
+### Getting Started
+- **[User Guide](docs/user_guide.md)** - Complete guide to using the framework, including examples and best practices
+- **[Quick Start Examples](examples/)** - Working code examples for common use cases
 
-## Next Steps
+### Reference
+- **[API Documentation](docs/api.md)** - Comprehensive API reference for all classes and methods
+- **[Architecture Overview](docs/architecture.md)** - Design philosophy, implementation details, and internals
 
-After generating the documentation scaffold:
+### Advanced
+- **[Benchmarks](benchmarks/)** - Performance benchmarks and validation suite
+- **[Tests](tests/)** - Comprehensive test suite with examples of usage patterns
 
-1. Review and customize each documentation file for your specific project
-2. Fill in project-specific details (repository URL, setup steps, API endpoints)
-3. Add screenshots, diagrams, or other visual aids as needed
-4. Keep documentation up-to-date as the project evolves
+## Performance
 
-## Contributing
+The framework is designed to meet strict performance requirements and has been validated through comprehensive benchmarking:
 
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this project.
+- **Context Indexing**: Handle 100+ files in < 5 seconds
+- **Multi-File Reasoning**: Maintain coherence across 10+ related files
+- **Memory Efficiency**: LRU eviction and configurable limits for large codebases
+- **Search Performance**: Token-based indexing for fast file search (<10ms)
+- **Context Windows**: Generate prioritized file subsets within token budgets (<50ms)
+
+Run the benchmarks yourself:
+
+```bash
+python benchmarks/run_all.py
+```
+
+Results are generated in `benchmarks/results.json` and `benchmarks/results.md`.
 
 ## License
 
-[Specify your license here]
+MIT License
 
-## Support
+## Contributing
 
-For questions, issues, or feature requests, please refer to the [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) guide or open an issue in the project repository.
-
----
-
-**Note**: This documentation was generated using automated scaffolding. Please customize it to match your project's specific needs and requirements.
+Contributions are welcome! Please ensure all tests pass and code is properly formatted before submitting pull requests.
