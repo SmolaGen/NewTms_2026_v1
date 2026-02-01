@@ -17,6 +17,14 @@ This document provides comprehensive API documentation for all public classes an
   - [AgentLogger](#agentlogger)
   - [LogLevel](#loglevel)
   - [LogFormat](#logformat)
+- [Roadmap Module](#roadmap-module)
+  - [RoadmapGenerator](#roadmapgenerator)
+  - [Roadmap](#roadmap)
+  - [Feature](#feature)
+  - [Milestone](#milestone)
+  - [Phase](#phase)
+  - [MoSCoWPriority](#moscowpriority)
+  - [FeatureStatus](#featurestatus)
 
 ---
 
@@ -1197,6 +1205,800 @@ json_logger = AgentLogger("agent2", format=LogFormat.JSON)
 
 ---
 
+## Roadmap Module
+
+The `roadmap` module provides the `RoadmapGenerator` agent for creating strategic development roadmaps from codebase analysis, competitive intelligence, and prioritization.
+
+### RoadmapGenerator
+
+```python
+from agent_framework.roadmap import RoadmapGenerator
+```
+
+An agent that generates strategic roadmaps from codebase analysis. This agent orchestrates multiple components to create comprehensive development roadmaps with feature extraction, MoSCoW prioritization, competitor pain point mapping, milestone generation, and phase organization.
+
+#### Constructor
+
+```python
+RoadmapGenerator(
+    name: str,
+    config: Optional[Dict[str, Any]] = None,
+    tool_registry: Optional[ToolRegistry] = None,
+    context_manager: Optional[ContextManager] = None,
+    logger: Optional[AgentLogger] = None
+)
+```
+
+**Parameters:**
+- `name` (str): A human-readable name for the agent instance
+- `config` (Optional[Dict[str, Any]]): Optional configuration dictionary for agent-specific settings
+- `tool_registry` (Optional[ToolRegistry]): Optional tool registry for managing agent capabilities
+- `context_manager` (Optional[ContextManager]): Optional context manager for multi-file context handling
+- `logger` (Optional[AgentLogger]): Optional logger for introspection and debugging
+
+#### Methods
+
+##### generate_roadmap
+
+```python
+def generate_roadmap(context: Dict[str, Any] = None) -> Roadmap
+```
+
+Generate a complete roadmap from the provided context. This is the main method for creating roadmaps with features, phases, and milestones.
+
+**Parameters:**
+- `context` (Optional[Dict[str, Any]]): Optional context dictionary containing:
+  - `requirements`: User requirements and priorities
+  - `codebase`: Codebase analysis data
+  - `competitors`: Competitor information
+  - `market`: Market analysis data
+  - `constraints`: Technical or business constraints
+  - `name`: Roadmap name (default: "Development Roadmap")
+  - `description`: Roadmap description
+
+**Returns:**
+- `Roadmap`: Complete Roadmap object with features, phases, and milestones (minimum 15 features in 4+ phases)
+
+**Example:**
+```python
+from agent_framework.roadmap import RoadmapGenerator
+
+# Create generator
+rg = RoadmapGenerator(name='roadmap-gen')
+rg.initialize()
+
+# Generate basic roadmap
+roadmap = rg.generate_roadmap()
+print(f"Generated {len(roadmap.features)} features in {len(roadmap.phases)} phases")
+
+# Generate with context
+context = {
+    "name": "Project Alpha Roadmap",
+    "description": "Strategic development plan for Project Alpha",
+    "requirements": {
+        "feat-custom": {
+            "name": "Custom Feature",
+            "description": "Project-specific functionality",
+            "moscow_priority": "MUST",
+            "business_value": 90
+        }
+    },
+    "competitors": [
+        {
+            "name": "Competitor A",
+            "pain_points": [...]
+        }
+    ]
+}
+
+roadmap = rg.generate_roadmap(context)
+```
+
+##### analyze_codebase_state
+
+```python
+def analyze_codebase_state() -> Dict[str, Any]
+```
+
+Analyze the current state of the codebase using the ContextManager. Gathers statistics about files, components, and dependencies.
+
+**Returns:**
+- `Dict[str, Any]`: Dictionary with codebase analysis results:
+  - `codebase_state['file_count']`: Number of files in context
+  - `codebase_state['total_size']`: Total size of all files in bytes
+  - `codebase_state['components']`: List of identified components
+  - `codebase_state['dependencies']`: List of file dependencies/relationships
+
+**Example:**
+```python
+from agent_framework.roadmap import RoadmapGenerator
+from agent_framework.context import ContextManager
+
+# Create with context manager
+context_manager = ContextManager()
+rg = RoadmapGenerator(name='rg', context_manager=context_manager)
+
+# Add files to context
+context_manager.add_file("src/main.py", "# Main code", {})
+context_manager.add_file("src/api.py", "# API code", {})
+
+# Analyze codebase
+result = rg.analyze_codebase_state()
+print(f"Files: {result['codebase_state']['file_count']}")
+print(f"Components: {result['codebase_state']['components']}")
+```
+
+##### execute
+
+```python
+def execute(task: str, **kwargs) -> Any
+```
+
+Execute a specific roadmap generation task. This method allows fine-grained control over individual steps of roadmap generation.
+
+**Parameters:**
+- `task` (str): The task type to execute. Supported tasks:
+  - `"generate"`: Generate a complete roadmap
+  - `"analyze_codebase"`: Analyze current codebase state
+  - `"extract_features"`: Extract features from context
+  - `"organize_phases"`: Organize features into phases
+  - `"map_pain_points"`: Map competitor pain points to features
+  - `"create_milestones"`: Create milestones with success metrics
+- `**kwargs`: Task-specific parameters
+
+**Returns:**
+- `Any`: Task-specific results (Roadmap, dict, list, etc.)
+
+**Example:**
+```python
+# Extract features only
+features = rg.execute("extract_features", context={"requirements": {...}})
+print(f"Extracted {len(features)} features")
+
+# Organize into phases
+phases = rg.execute("organize_phases", features=features)
+
+# Create milestones
+milestones = rg.execute("create_milestones", phases=phases)
+```
+
+#### Inherited Methods
+
+RoadmapGenerator inherits all methods from the [Agent](#agent) base class, including:
+- `initialize()`, `cleanup()`
+- `process_context()`, `format_response()`
+- `register_tool()`, `execute_tool()`, `list_tools()`
+- `add_context()`, `get_context()`, `search_context()`
+
+#### Example Usage
+
+```python
+from agent_framework.roadmap import RoadmapGenerator
+from agent_framework.context import ContextManager
+from agent_framework.logging import AgentLogger, LogLevel
+
+# Create components
+logger = AgentLogger("roadmap-example", level=LogLevel.INFO)
+context_manager = ContextManager(max_files=100, logger=logger)
+
+# Create roadmap generator
+generator = RoadmapGenerator(
+    name="Strategic Roadmap Generator",
+    config={"version": "1.0"},
+    context_manager=context_manager,
+    logger=logger
+)
+
+# Initialize
+generator.initialize()
+
+# Add codebase files to context
+context_manager.add_file(
+    "src/main.py",
+    "# Main application\nfrom api import create_app",
+    metadata={"component": "core"}
+)
+
+# Define context with competitive data
+context = {
+    "name": "Product Roadmap 2024",
+    "description": "Strategic development roadmap with competitive positioning",
+    "requirements": {
+        "feat-ai-search": {
+            "name": "AI-Powered Search",
+            "description": "Intelligent search with natural language",
+            "moscow_priority": "SHOULD",
+            "business_value": 85,
+            "technical_complexity": 70,
+            "estimated_effort_days": 15.0
+        }
+    },
+    "market": {
+        "size": "Growing",
+        "trends": ["AI integration", "Mobile-first", "Real-time collaboration"]
+    }
+}
+
+# Generate roadmap
+roadmap = generator.generate_roadmap(context)
+
+# Access roadmap components
+print(f"Roadmap: {roadmap.name}")
+print(f"Features: {len(roadmap.features)}")
+print(f"Phases: {len(roadmap.phases)}")
+print(f"Milestones: {len(roadmap.milestones)}")
+
+# Examine features by priority
+must_haves = roadmap.get_features_by_priority(MoSCoWPriority.MUST)
+print(f"Must-have features: {len(must_haves)}")
+
+# Validate dependencies
+is_valid = roadmap.validate_dependencies()
+has_cycles = roadmap.has_circular_dependencies()
+print(f"Dependencies valid: {is_valid}, Has cycles: {has_cycles}")
+
+# Format and display
+response = generator.format_response(roadmap)
+print(response)
+
+# Cleanup
+generator.cleanup()
+```
+
+---
+
+### Roadmap
+
+```python
+from agent_framework.roadmap_models import Roadmap
+```
+
+Main roadmap container organizing features, milestones, and phases into a strategic development plan.
+
+#### Constructor
+
+```python
+Roadmap(
+    id: str,
+    name: str,
+    description: str,
+    version: str = "1.0.0",
+    created_at: datetime = datetime.now(),
+    updated_at: datetime = datetime.now(),
+    features: List[Feature] = [],
+    milestones: List[Milestone] = [],
+    phases: List[Phase] = [],
+    market_context: Dict[str, Any] = {},
+    dependencies: Dict[str, List[str]] = {},
+    success_metrics: List[str] = [],
+    metadata: Dict[str, Any] = {}
+)
+```
+
+**Attributes:**
+- `id` (str): Unique identifier for the roadmap
+- `name` (str): Human-readable roadmap name
+- `description` (str): Detailed roadmap description
+- `version` (str): Roadmap version string (default: "1.0.0")
+- `created_at` (datetime): Roadmap creation timestamp
+- `updated_at` (datetime): Last update timestamp
+- `features` (List[Feature]): List of all features in the roadmap
+- `milestones` (List[Milestone]): List of all milestones
+- `phases` (List[Phase]): List of all phases (automatically sorted by order)
+- `market_context` (Dict[str, Any]): Context about market and competitive landscape
+- `dependencies` (Dict[str, List[str]]): Dependency graph mapping feature relationships
+- `success_metrics` (List[str]): Overall roadmap success metrics
+- `metadata` (Dict[str, Any]): Additional roadmap metadata
+
+#### Methods
+
+##### get_feature_by_id
+
+```python
+def get_feature_by_id(feature_id: str) -> Optional[Feature]
+```
+
+Get a feature by its ID.
+
+**Parameters:**
+- `feature_id` (str): The feature ID to look up
+
+**Returns:**
+- `Optional[Feature]`: The feature if found, None otherwise
+
+##### get_milestone_by_id
+
+```python
+def get_milestone_by_id(milestone_id: str) -> Optional[Milestone]
+```
+
+Get a milestone by its ID.
+
+**Parameters:**
+- `milestone_id` (str): The milestone ID to look up
+
+**Returns:**
+- `Optional[Milestone]`: The milestone if found, None otherwise
+
+##### get_phase_by_id
+
+```python
+def get_phase_by_id(phase_id: str) -> Optional[Phase]
+```
+
+Get a phase by its ID.
+
+**Parameters:**
+- `phase_id` (str): The phase ID to look up
+
+**Returns:**
+- `Optional[Phase]`: The phase if found, None otherwise
+
+##### get_features_by_priority
+
+```python
+def get_features_by_priority(priority: MoSCoWPriority) -> List[Feature]
+```
+
+Get all features with a specific MoSCoW priority.
+
+**Parameters:**
+- `priority` (MoSCoWPriority): The priority level to filter by
+
+**Returns:**
+- `List[Feature]`: List of features matching the priority
+
+##### get_features_by_phase
+
+```python
+def get_features_by_phase(phase_id: str) -> List[Feature]
+```
+
+Get all features in a specific phase.
+
+**Parameters:**
+- `phase_id` (str): The phase ID to filter by
+
+**Returns:**
+- `List[Feature]`: List of features in the phase
+
+##### validate_dependencies
+
+```python
+def validate_dependencies() -> bool
+```
+
+Validate that all feature dependencies are resolvable.
+
+**Returns:**
+- `bool`: True if all dependencies are valid, False otherwise
+
+##### has_circular_dependencies
+
+```python
+def has_circular_dependencies() -> bool
+```
+
+Check if the roadmap has circular dependencies.
+
+**Returns:**
+- `bool`: True if circular dependencies exist, False otherwise
+
+#### Example Usage
+
+```python
+from agent_framework.roadmap_models import (
+    Roadmap, Feature, Phase, Milestone, MoSCoWPriority
+)
+
+# Create features
+feature1 = Feature(
+    id="feat-1",
+    name="Core Architecture",
+    description="Foundation setup",
+    moscow_priority=MoSCoWPriority.MUST,
+    priority_rationale="Required for all other features",
+    business_value=90,
+    technical_complexity=60,
+    estimated_effort_days=8.0
+)
+
+feature2 = Feature(
+    id="feat-2",
+    name="User Authentication",
+    description="Login system",
+    moscow_priority=MoSCoWPriority.MUST,
+    priority_rationale="Security requirement",
+    business_value=95,
+    technical_complexity=50,
+    estimated_effort_days=5.0,
+    dependencies=["feat-1"]
+)
+
+# Create phase
+phase1 = Phase(
+    id="phase-1",
+    name="Foundation",
+    description="Core infrastructure",
+    order=1,
+    features=["feat-1", "feat-2"],
+    objectives=["Establish architecture", "Implement security"],
+    success_criteria=["All tests passing", "Security audit complete"]
+)
+
+# Create milestone
+milestone1 = Milestone(
+    id="ms-1",
+    name="Foundation Complete",
+    description="Phase 1 completion",
+    success_metrics=["Architecture documented", "Auth system live"],
+    features=["feat-1", "feat-2"],
+    phase_id="phase-1"
+)
+
+# Create roadmap
+roadmap = Roadmap(
+    id="roadmap-2024",
+    name="Product Roadmap 2024",
+    description="Strategic development plan",
+    features=[feature1, feature2],
+    phases=[phase1],
+    milestones=[milestone1]
+)
+
+# Query roadmap
+must_features = roadmap.get_features_by_priority(MoSCoWPriority.MUST)
+phase_features = roadmap.get_features_by_phase("phase-1")
+
+# Validate
+is_valid = roadmap.validate_dependencies()  # True
+has_cycles = roadmap.has_circular_dependencies()  # False
+```
+
+---
+
+### Feature
+
+```python
+from agent_framework.roadmap_models import Feature
+```
+
+Represents a feature in the development roadmap with prioritization, effort estimation, and success metrics.
+
+#### Constructor
+
+```python
+Feature(
+    id: str,
+    name: str,
+    description: str,
+    moscow_priority: MoSCoWPriority,
+    priority_rationale: str,
+    business_value: int = 0,
+    technical_complexity: int = 0,
+    estimated_effort_days: float = 0.0,
+    dependencies: List[str] = [],
+    competitor_pain_points: List[str] = [],
+    success_metrics: List[str] = [],
+    status: FeatureStatus = FeatureStatus.PROPOSED,
+    phase_id: Optional[str] = None,
+    metadata: Dict[str, Any] = {}
+)
+```
+
+**Attributes:**
+- `id` (str): Unique identifier for the feature
+- `name` (str): Human-readable feature name
+- `description` (str): Detailed feature description
+- `moscow_priority` (MoSCoWPriority): MoSCoW prioritization category
+- `priority_rationale` (str): Explanation for the prioritization decision
+- `business_value` (int): Business value score (0-100)
+- `technical_complexity` (int): Technical complexity score (0-100)
+- `estimated_effort_days` (float): Estimated effort in person-days
+- `dependencies` (List[str]): List of feature IDs this feature depends on
+- `competitor_pain_points` (List[str]): List of competitor pain point IDs this addresses
+- `success_metrics` (List[str]): List of measurable success criteria
+- `status` (FeatureStatus): Current implementation status
+- `phase_id` (Optional[str]): ID of the phase this feature belongs to
+- `metadata` (Dict[str, Any]): Additional feature metadata
+
+**Validation:**
+- `business_value` must be between 0 and 100
+- `technical_complexity` must be between 0 and 100
+- `estimated_effort_days` must be non-negative
+
+#### Example Usage
+
+```python
+from agent_framework.roadmap_models import Feature, MoSCoWPriority, FeatureStatus
+
+# Create a feature
+feature = Feature(
+    id="feat-api-gateway",
+    name="API Gateway",
+    description="Centralized API gateway with rate limiting and authentication",
+    moscow_priority=MoSCoWPriority.MUST,
+    priority_rationale="Required for scalable microservices architecture",
+    business_value=85,
+    technical_complexity=65,
+    estimated_effort_days=12.0,
+    dependencies=["feat-auth-service"],
+    competitor_pain_points=["pain-slow-api", "pain-no-rate-limiting"],
+    success_metrics=[
+        "Handle 1000+ req/sec",
+        "Response time <100ms",
+        "99.9% uptime"
+    ],
+    status=FeatureStatus.PLANNED,
+    metadata={"team": "platform", "sprint": 3}
+)
+
+# Access properties
+print(f"Feature: {feature.name}")
+print(f"Priority: {feature.moscow_priority.value}")
+print(f"Business Value: {feature.business_value}/100")
+print(f"Effort: {feature.estimated_effort_days} days")
+print(f"Dependencies: {len(feature.dependencies)}")
+```
+
+---
+
+### Milestone
+
+```python
+from agent_framework.roadmap_models import Milestone
+```
+
+Represents a milestone in the development roadmap with success metrics and feature tracking.
+
+#### Constructor
+
+```python
+Milestone(
+    id: str,
+    name: str,
+    description: str,
+    target_date: Optional[datetime] = None,
+    success_metrics: List[str] = [],
+    features: List[str] = [],
+    phase_id: Optional[str] = None,
+    is_completed: bool = False,
+    completed_date: Optional[datetime] = None,
+    metadata: Dict[str, Any] = {}
+)
+```
+
+**Attributes:**
+- `id` (str): Unique identifier for the milestone
+- `name` (str): Human-readable milestone name
+- `description` (str): Detailed milestone description
+- `target_date` (Optional[datetime]): Target completion date
+- `success_metrics` (List[str]): List of measurable criteria for milestone completion (required, minimum 1)
+- `features` (List[str]): List of feature IDs included in this milestone
+- `phase_id` (Optional[str]): ID of the phase this milestone belongs to
+- `is_completed` (bool): Whether the milestone has been achieved
+- `completed_date` (Optional[datetime]): Actual completion date (required if is_completed is True)
+- `metadata` (Dict[str, Any]): Additional milestone metadata
+
+**Validation:**
+- Must have at least one success metric
+- If `is_completed` is True, `completed_date` must be set
+
+#### Example Usage
+
+```python
+from agent_framework.roadmap_models import Milestone
+from datetime import datetime, timedelta
+
+# Create a milestone
+milestone = Milestone(
+    id="ms-mvp",
+    name="MVP Launch",
+    description="Minimum viable product ready for beta users",
+    target_date=datetime.now() + timedelta(days=90),
+    success_metrics=[
+        "All core features deployed",
+        "Load testing passed",
+        "Security audit complete",
+        "Beta user signups >100"
+    ],
+    features=["feat-1", "feat-2", "feat-3"],
+    phase_id="phase-1",
+    is_completed=False,
+    metadata={"priority": "critical", "team": "product"}
+)
+
+# Track completion
+if milestone.is_completed:
+    print(f"Completed on: {milestone.completed_date}")
+else:
+    days_remaining = (milestone.target_date - datetime.now()).days
+    print(f"Due in {days_remaining} days")
+```
+
+---
+
+### Phase
+
+```python
+from agent_framework.roadmap_models import Phase
+```
+
+Represents a development phase containing related features and milestones.
+
+#### Constructor
+
+```python
+Phase(
+    id: str,
+    name: str,
+    description: str,
+    order: int,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    features: List[str] = [],
+    milestones: List[str] = [],
+    objectives: List[str] = [],
+    success_criteria: List[str] = [],
+    status: str = "planned",
+    metadata: Dict[str, Any] = {}
+)
+```
+
+**Attributes:**
+- `id` (str): Unique identifier for the phase
+- `name` (str): Human-readable phase name
+- `description` (str): Detailed phase description
+- `order` (int): Sequential order of this phase (0-indexed)
+- `start_date` (Optional[datetime]): Planned start date
+- `end_date` (Optional[datetime]): Planned end date
+- `features` (List[str]): List of feature IDs in this phase
+- `milestones` (List[str]): List of milestone IDs in this phase
+- `objectives` (List[str]): List of phase objectives
+- `success_criteria` (List[str]): List of criteria for phase completion
+- `status` (str): Current phase status (e.g., "planned", "in_progress", "completed")
+- `metadata` (Dict[str, Any]): Additional phase metadata
+
+**Validation:**
+- `order` must be non-negative
+- If both `start_date` and `end_date` are set, start must be before end
+
+#### Example Usage
+
+```python
+from agent_framework.roadmap_models import Phase
+from datetime import datetime, timedelta
+
+# Create a phase
+phase = Phase(
+    id="phase-foundation",
+    name="Foundation",
+    description="Core infrastructure and architecture setup",
+    order=1,
+    start_date=datetime.now(),
+    end_date=datetime.now() + timedelta(days=60),
+    features=["feat-arch", "feat-auth", "feat-db"],
+    milestones=["ms-arch-complete"],
+    objectives=[
+        "Establish core architecture patterns",
+        "Set up development infrastructure",
+        "Implement security fundamentals"
+    ],
+    success_criteria=[
+        "Architecture documented and reviewed",
+        "All foundational tests passing",
+        "Security audit passed"
+    ],
+    status="in_progress",
+    metadata={"lead": "architect-team", "budget": 50000}
+)
+
+print(f"Phase {phase.order}: {phase.name}")
+print(f"Features: {len(phase.features)}")
+print(f"Duration: {(phase.end_date - phase.start_date).days} days")
+```
+
+---
+
+### MoSCoWPriority
+
+```python
+from agent_framework.roadmap_models import MoSCoWPriority
+```
+
+MoSCoW prioritization enumeration for features. This enum defines the four categories of the MoSCoW prioritization method.
+
+**Values:**
+- `MUST`: Critical features that must be delivered for success
+- `SHOULD`: Important features that should be included if possible
+- `COULD`: Desirable features that could be included if resources permit
+- `WONT`: Features that won't be delivered in this iteration but may be considered later
+
+#### Example
+
+```python
+from agent_framework.roadmap_models import Feature, MoSCoWPriority
+
+# Create features with different priorities
+critical_feature = Feature(
+    id="feat-1",
+    name="User Authentication",
+    description="Secure login system",
+    moscow_priority=MoSCoWPriority.MUST,
+    priority_rationale="Security requirement",
+    business_value=95,
+    technical_complexity=50,
+    estimated_effort_days=5.0
+)
+
+nice_to_have = Feature(
+    id="feat-2",
+    name="Dark Mode",
+    description="UI theme toggle",
+    moscow_priority=MoSCoWPriority.COULD,
+    priority_rationale="User preference, not critical for MVP",
+    business_value=40,
+    technical_complexity=30,
+    estimated_effort_days=2.0
+)
+
+# Filter by priority
+features = [critical_feature, nice_to_have]
+must_haves = [f for f in features if f.moscow_priority == MoSCoWPriority.MUST]
+```
+
+---
+
+### FeatureStatus
+
+```python
+from agent_framework.roadmap_models import FeatureStatus
+```
+
+Feature implementation status enumeration. This enum tracks the current state of feature development.
+
+**Values:**
+- `PROPOSED`: Feature has been proposed but not yet planned
+- `PLANNED`: Feature is planned for implementation
+- `IN_PROGRESS`: Feature is currently being implemented
+- `COMPLETED`: Feature implementation is complete
+- `CANCELLED`: Feature has been cancelled and won't be implemented
+
+#### Example
+
+```python
+from agent_framework.roadmap_models import Feature, FeatureStatus, MoSCoWPriority
+
+# Track feature lifecycle
+feature = Feature(
+    id="feat-notifications",
+    name="Push Notifications",
+    description="Real-time push notification system",
+    moscow_priority=MoSCoWPriority.SHOULD,
+    priority_rationale="Improves user engagement",
+    business_value=70,
+    technical_complexity=60,
+    estimated_effort_days=8.0,
+    status=FeatureStatus.PROPOSED
+)
+
+# Update status as work progresses
+feature.status = FeatureStatus.PLANNED
+print(f"Feature planned: {feature.name}")
+
+feature.status = FeatureStatus.IN_PROGRESS
+print(f"Implementation started: {feature.name}")
+
+feature.status = FeatureStatus.COMPLETED
+print(f"Feature complete: {feature.name}")
+
+# Check status
+if feature.status == FeatureStatus.COMPLETED:
+    print("Ready for deployment")
+```
+
+---
+
 ## Common Patterns
 
 ### Creating a Complete Agent System
@@ -1262,6 +2064,169 @@ finally:
 
 # Review logs
 print(logger.get_logs())
+```
+
+### Strategic Roadmap Generation
+
+```python
+from agent_framework.roadmap import RoadmapGenerator
+from agent_framework.roadmap_models import (
+    Roadmap, Feature, MoSCoWPriority, FeatureStatus
+)
+from agent_framework.context import ContextManager
+from agent_framework.logging import AgentLogger, LogLevel
+
+# Set up components
+logger = AgentLogger("roadmap-system", level=LogLevel.INFO)
+context_manager = ContextManager(max_files=500, logger=logger)
+
+# Add codebase files for analysis
+context_manager.add_file(
+    "src/api/main.py",
+    "# Main API entry point\nfrom fastapi import FastAPI\napp = FastAPI()",
+    metadata={"component": "api", "language": "python"}
+)
+context_manager.add_file(
+    "src/database/models.py",
+    "# Database models\nfrom sqlalchemy import Column, Integer, String",
+    metadata={"component": "database", "language": "python"}
+)
+
+# Create roadmap generator
+generator = RoadmapGenerator(
+    name="Product Roadmap Generator",
+    config={"version": "2024.1"},
+    context_manager=context_manager,
+    logger=logger
+)
+
+generator.initialize()
+
+# Define comprehensive context
+context = {
+    "name": "Product Development Roadmap 2024",
+    "description": "Strategic roadmap for next-gen product platform",
+    "requirements": {
+        "feat-realtime-collab": {
+            "name": "Real-time Collaboration",
+            "description": "Multi-user real-time editing and commenting",
+            "moscow_priority": "MUST",
+            "priority_rationale": "Key differentiator from competitors",
+            "business_value": 92,
+            "technical_complexity": 75,
+            "estimated_effort_days": 18.0,
+            "success_metrics": [
+                "Support 50+ concurrent users per document",
+                "Conflict resolution <100ms",
+                "Zero data loss in collaboration"
+            ]
+        },
+        "feat-ai-assistant": {
+            "name": "AI Writing Assistant",
+            "description": "AI-powered content suggestions and auto-complete",
+            "moscow_priority": "SHOULD",
+            "priority_rationale": "High user demand, competitive advantage",
+            "business_value": 88,
+            "technical_complexity": 85,
+            "estimated_effort_days": 25.0,
+            "dependencies": ["feat-core-architecture"],
+            "success_metrics": [
+                "95% suggestion accuracy",
+                "Responses <500ms",
+                "User adoption >60%"
+            ]
+        }
+    },
+    "competitors": [
+        {
+            "name": "Competitor X",
+            "pain_points": [
+                {
+                    "id": "pain-slow-sync",
+                    "name": "Slow Synchronization",
+                    "description": "Users report slow sync across devices",
+                    "severity": "HIGH",
+                    "frequency": "VERY_COMMON",
+                    "potential_solution": "Real-time collaboration and instant sync"
+                }
+            ]
+        }
+    ],
+    "market": {
+        "size": "Growing - 25% YoY",
+        "trends": ["AI integration", "Real-time collaboration", "Mobile-first"],
+        "target_segment": "SMB and Enterprise teams"
+    }
+}
+
+# Generate complete roadmap
+roadmap = generator.generate_roadmap(context)
+
+# Analyze the roadmap
+print(f"\nRoadmap: {roadmap.name}")
+print(f"Total Features: {len(roadmap.features)}")
+print(f"Phases: {len(roadmap.phases)}")
+print(f"Milestones: {len(roadmap.milestones)}")
+
+# Examine features by priority
+must_haves = roadmap.get_features_by_priority(MoSCoWPriority.MUST)
+should_haves = roadmap.get_features_by_priority(MoSCoWPriority.SHOULD)
+could_haves = roadmap.get_features_by_priority(MoSCoWPriority.COULD)
+
+print(f"\nPriority Breakdown:")
+print(f"  MUST: {len(must_haves)} features")
+print(f"  SHOULD: {len(should_haves)} features")
+print(f"  COULD: {len(could_haves)} features")
+
+# Examine phases
+print(f"\nPhase Overview:")
+for phase in roadmap.phases:
+    phase_features = roadmap.get_features_by_phase(phase.id)
+    total_effort = sum(f.estimated_effort_days for f in phase_features)
+    print(f"  Phase {phase.order}: {phase.name}")
+    print(f"    Features: {len(phase_features)}")
+    print(f"    Total Effort: {total_effort} person-days")
+    print(f"    Objectives: {len(phase.objectives)}")
+
+# Check milestones
+print(f"\nMilestones:")
+for milestone in roadmap.milestones:
+    print(f"  {milestone.name}")
+    print(f"    Features: {len(milestone.features)}")
+    print(f"    Success Metrics: {len(milestone.success_metrics)}")
+    if milestone.success_metrics:
+        print(f"      - {milestone.success_metrics[0]}")
+
+# Validate roadmap integrity
+print(f"\nValidation:")
+deps_valid = roadmap.validate_dependencies()
+has_cycles = roadmap.has_circular_dependencies()
+print(f"  Dependencies valid: {deps_valid}")
+print(f"  Circular dependencies: {has_cycles}")
+
+# Find features addressing competitor pain points
+features_with_pain_points = [
+    f for f in roadmap.features if f.competitor_pain_points
+]
+print(f"  Features addressing pain points: {len(features_with_pain_points)}")
+
+# Calculate total effort
+total_effort = sum(f.estimated_effort_days for f in roadmap.features)
+print(f"  Total estimated effort: {total_effort} person-days")
+
+# Get specific feature details
+realtime_feature = roadmap.get_feature_by_id("feat-realtime-collab")
+if realtime_feature:
+    print(f"\nFeatured: {realtime_feature.name}")
+    print(f"  Priority: {realtime_feature.moscow_priority.value}")
+    print(f"  Business Value: {realtime_feature.business_value}/100")
+    print(f"  Complexity: {realtime_feature.technical_complexity}/100")
+    print(f"  Effort: {realtime_feature.estimated_effort_days} days")
+    print(f"  Success Metrics: {len(realtime_feature.success_metrics)}")
+
+# Clean up
+generator.cleanup()
+print("\nRoadmap generation complete!")
 ```
 
 ### Error Handling
